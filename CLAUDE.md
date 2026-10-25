@@ -74,7 +74,7 @@ Electron desktop app for one job seeker: reads their CV, pulls jobs from job sit
   - LinkedIn login persisting across restarts;
   - hiring-team capture on a LinkedIn job page;
   - the CV upload dialog.
-- **No git repository yet.** Confirm with the user before `git init` or a commit.
+- **Git:** `main` tracks the private GitHub repo `hossainyousuf751/jobpilot` (pushed 2026-10-26; `gh` is logged in). Ask before every commit or push.
 
 ## Delegating to agent roles
 Delegate only when the work is independent or needs a fresh, unanchored read. Do a handful of tool calls yourself.
