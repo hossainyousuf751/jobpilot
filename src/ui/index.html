@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>JobPilot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav aria-label="Main">
+    <h1>JobPilot</h1>
+    <button data-tab="feed" class="active">Live feed <span id="feedCount" class="muted"></span></button>
+    <button data-tab="alerts">Alerts <span id="alertCount" class="badge" hidden></span></button>
+    <button data-tab="recruiters">Recruiters</button>
+    <button data-tab="browser">Portals</button>
+    <button data-tab="profile">Profile &amp; CV</button>
+    <div id="status" class="muted" aria-live="polite"></div>
+  </nav>
+
+  <main>
+    <section id="feed">
+      <header class="bar">
+        <input id="q" type="search" placeholder="Filter by title, company, skill…" aria-label="Filter jobs">
+        <label>Min score <input id="minScore" type="number" min="0" max="100" step="5"></label>
+        <label><input id="showIneligible" type="checkbox"> Show ineligible</label>
+        <button id="refresh" class="primary">Refresh now</button>
+      </header>
+      <ul id="jobs" class="list"></ul>
+    </section>
+
+    <section id="alerts" hidden>
+      <header class="bar"><h2>New matches</h2><button id="readAll">Mark all read</button></header>
+      <ul id="alertList" class="list"></ul>
+    </section>
+
+    <section id="recruiters" hidden>
+      <h2>People</h2>
+      <p class="muted">Pulled from job descriptions and from the hiring-team box on LinkedIn job pages you open in Portals.</p>
+      <ul id="people" class="list"></ul>
+      <h2>Companies hiring for your profile</h2>
+      <ul id="companies" class="list grid"></ul>
+    </section>
+
+    <section id="browser" hidden>
+      <header class="bar">
+        <button id="back" aria-label="Back">◀</button>
+        <button id="fwd" aria-label="Forward">▶</button>
+        <button id="reload" aria-label="Reload">⟳</button>
+        <input id="url" type="url" aria-label="Address">
+        <button data-go="https://www.linkedin.com/jobs/">LinkedIn</button>
+        <button data-go="https://www.indeed.com/">Indeed</button>
+        <button data-go="https://www.glassdoor.com/Job/">Glassdoor</button>
+        <button id="extern" title="Open in system browser">↗</button>
+      </header>
+      <webview id="portal" partition="persist:portals" src="about:blank"></webview>
+    </section>
+
+    <section id="profile" hidden>
+      <header class="bar"><button id="upload" class="primary">Upload CV (PDF / DOCX / TXT)</button><span id="cvFile" class="muted"></span></header>
+      <form id="profileForm">
+        <label>Skills (comma separated)<textarea name="skills" rows="4"></textarea></label>
+        <label>Target roles, used as search queries (max 5)<input name="roles"></label>
+        <div class="row">
+          <label>Years of experience<input name="years" type="number" min="0" max="50"></label>
+          <label>Alert when score ≥<input name="minScore" type="number" min="0" max="100"></label>
+          <label>Adzuna country code<input name="adzunaCountry" maxlength="2"></label>
+        </div>
+        <p class="muted">Locations are separated by semicolons. All blank = anywhere.</p>
+        <div class="row">
+          <label>On-site: "City, Country" (first one is searched)<input name="locations" placeholder="Dhaka, Bangladesh"></label>
+          <label>Search radius (km)<input name="distanceKm" type="number" min="1" max="500"></label>
+        </div>
+        <label>Would relocate to: countries, one searched per refresh in turn<input name="relocate" placeholder="UAE; Saudi Arabia; Qatar; Singapore; Malaysia; UK"></label>
+        <label>Remote jobs limited to these regions are OK (your on-site countries always are)<input name="remoteFrom" placeholder="APAC; Asia; South Asia"></label>
+        <label class="check"><input name="needsSponsorship" type="checkbox"> I need visa sponsorship</label>
+        <button class="primary">Save profile</button>
+      </form>
+      <form id="keysForm">
+        <h2>API keys <span class="muted">(encrypted with your OS keychain)</span></h2>
+        <p class="muted">JSearch brings in LinkedIn, Indeed and Glassdoor listings. Get a free key at rapidapi.com → JSearch. Adzuna keys: developer.adzuna.com.</p>
+        <label>JSearch (RapidAPI) key <span data-key="jsearchKey"></span><input name="jsearchKey" type="password" autocomplete="off"></label>
+        <div class="row">
+          <label>Adzuna app id <span data-key="adzunaId"></span><input name="adzunaId" autocomplete="off"></label>
+          <label>Adzuna app key <span data-key="adzunaKey"></span><input name="adzunaKey" type="password" autocomplete="off"></label>
+        </div>
+        <label>Hunter.io key: finds HR contacts per hiring company (Recruiters tab, on demand) <span data-key="hunterKey"></span><input name="hunterKey" type="password" autocomplete="off"></label>
+        <button>Save keys</button>
+      </form>
+    </section>
+  </main>
+  <div id="toast" role="status" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
