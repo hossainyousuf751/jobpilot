@@ -860,7 +860,9 @@ const USERS_PER_RUN = 3, MIN_GAP_MS = 50 * 60 * 1000;
 async function rest(path, init = {}) {
   const res = await fetch(`${BASE}/${path}`, { ...init, headers: { ...HEAD, ...init.headers } });
   if (!res.ok) throw new Error(`${path.split('?')[0]}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
-  return res.status === 204 ? null : res.json();
+  // Inserts and void functions answer with an empty body.
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 const getMeta = async (key) => (await rest(`meta?key=eq.${key}&select=value`))[0]?.value || null;
 const setMeta = (key, value) => rest('meta', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }) });
@@ -912,6 +914,12 @@ async function run() {
   return result;
 }
 
-Deno.serve(async () => {
-  try { return Response.json(await run()); } catch (e) { return Response.json({ error: String(e?.message || e) }, { status: 500 }); }
+// Only POST runs (pg_cron sends POST); browsers' preflight OPTIONS and stray GETs must not start a run.
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') return new Response(null, { status: 204 });
+  try { return Response.json(await run()); } catch (e) {
+    const error = String(e?.message || e).slice(0, 500);
+    await setMeta('last_fetch', { at: new Date().toISOString(), fetched: 0, fresh: 0, status: { fetcher: `error: ${error}` } }).catch(() => {});
+    return Response.json({ error }, { status: 500 });
+  }
 });
