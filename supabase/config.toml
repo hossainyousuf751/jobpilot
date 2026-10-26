@@ -1,0 +1,6 @@
+# Supabase project config for the GitHub integration (deploys supabase/migrations and supabase/functions on push to main).
+project_id = "jobpilot"
+
+[functions.fetch-jobs]
+# Called by pg_cron with the public key; the function itself rate-limits to one run per 50 min.
+verify_jwt = true

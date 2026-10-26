@@ -2,3 +2,4 @@ node_modules/
 CV/
 *.db
 graphify-out/
+web-dist/

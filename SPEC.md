@@ -123,10 +123,100 @@ Two new sections under "Documents". Everything stays local; PDFs are made by Ele
 - **Matching set:** the letter uses the chosen CV's design and personal details.
 - **Download PDF.**
 
+## Going online: JobPilot for up to 15 testers (plan, 2026-10-27)
+**Goal:** people create an account, log in, upload their CV and get matched jobs in a browser. Testing phase: invite-only, at most 15 users.
+
+**Architecture (reuse, don't rewrite):**
+- **Server:** `src/server.js` on `node:http`. It serves `src/ui/` as static files and exposes each of the current IPC calls (33 of them) as `POST /api/<name>`. A small `src/ui/api.js` replaces `preload.js` with `fetch`, so the UI code barely changes. No web framework or new npm dependency is needed: `node:http`, `node:crypto` and `node:sqlite` cover it. The Electron app keeps working from the same code.
+- **Accounts:**
+  - Invite-only sign-up: the admin creates an invite link. Email and password, hashed with `crypto.scrypt`.
+  - Sessions in an HttpOnly, Secure, SameSite=Strict cookie. Login is rate-limited.
+  - A hard cap of 15 users.
+  - Admin page: invite, list users, reset a password, delete a user.
+- **Data isolation:** one SQLite file per user (`data/users/<id>.db`, the current schema unchanged) plus `data/server.db` (users, sessions, invites, shared job pool). A request only ever receives its own user's database, so one user's data can't leak to another through a missed `WHERE user_id`.
+- **CV upload:**
+  - The PDF or DOCX is parsed in memory (5 MB cap, type check).
+  - Only the derived profile and the CV documents are stored, never the original file; that matches today's rule.
+  - "Delete my account" removes the user's database file.
+- **Job fetching becomes a shared scheduler:**
+  - The server collects the distinct (role, location) searches across all users and runs each one at most every 3-4 h. It shares the raw results, and each user's jobs are scored against their own profile.
+  - Fifteen users polling every 30 minutes from one data-centre IP would get LinkedIn and Indeed to block the server quickly.
+- **Paid APIs (JSearch, Reed, Hunter):** the keys live in the server's environment, owned by the admin. Quotas are shared, so there's a per-user daily cap on Hunter lookups.
+- **Features that work differently on the web:**
+  - **Desktop notifications:** become in-app alerts. An email digest comes later.
+  - **PDF export:** becomes the browser's print → Save as PDF, using the same `doc.css`.
+  - **Portals tab:** sites forbid being embedded in a web page, so it becomes links that open in a new tab.
+  - **Hiring-team capture from a LinkedIn page:** dropped on the web; it would need a browser extension.
+  - **`safeStorage`:** replaced by server environment variables.
+- **Phones:** the UI is desktop-first, and testers will use phones, so it needs a responsive pass.
+
+**Hosting: free, with no credit card (the user's constraint, 2026-10-27).** Oracle was ruled out because it needs a card. This replaces the "Server" approach above. There is no server of our own:
+- **UI:** static files on GitHub Pages, which needs a public repo on the free plan. Cloudflare Pages is the alternative if the code must stay private.
+- **Accounts and data: Supabase free plan, no card needed.**
+  - Built-in email/password auth (confirmation and reset emails included).
+  - Postgres with row-level security, so each user reads only their own rows.
+  - Limits: 500 MB of database. A project pauses after 7 days with no activity; the scheduled fetch keeps it awake.
+- **In the browser:** `match.js` (already pure JS) does the scoring. CV parsing also runs in the browser (pdf.js, mammoth), so the CV file never leaves the user's device; only the derived profile and the CV documents are saved.
+- **Job fetching:** a scheduled Supabase Edge Function calls the job APIs (Remotive, Arbeitnow, RemoteOK, JSearch, Reed) every 3-4 h for the distinct searches across users. Keys are kept as function secrets.
+  - JobSpy (LinkedIn, Indeed, Bdjobs, Bayt) is Python and can't run there.
+  - The option for it is a GitHub Actions cron. That's a grey area under the Actions terms (use unrelated to the repo's software), and LinkedIn blocks data-centre IPs. Decision pending.
+- **PDF:** the browser's print. **Portals:** links that open a new tab.
+- **The desktop Electron app stays as it is.**
+- **New dependencies (need approval):** `@supabase/supabase-js`, pdf.js and mammoth's browser build, all vendored as files.
+
+**Superseded hosting option, kept for reference (needs a card):**
+- **Primary:** an Oracle Cloud Always Free Ampere A1 VM in Singapore. Since June 2026 it gives 2 OCPU and 12 GB, plenty for 15 users. It runs Node 24 and Python 3.11 (for JobSpy) on a persistent disk.
+- **Caveats:**
+  - Sign-up needs a card to verify identity.
+  - "Out of capacity" errors happen; retry, or use the free E2.1.Micro (1 GB) as a fallback.
+  - Instances idle for 7 days may be reclaimed; a nightly backup off the server covers this.
+- **Fallback:** a spare home PC (not the work laptop) with a free Cloudflare Tunnel.
+- **Ruled out:** Render and Koyeb free tiers sleep and have no persistent disk; Fly has no free tier.
+- **Around the server, all free:**
+  - Caddy for HTTPS;
+  - a DuckDNS subdomain;
+  - a systemd service;
+  - a nightly backup of `data/`;
+  - an UptimeRobot check;
+  - Brevo for email later.
+
+**Security and privacy:**
+- HTTPS only; the existing CSP; an Origin check on every `POST`; authorisation on every call.
+- Upload limits; logs with no personal data.
+- A short privacy notice and consent at sign-up; account deletion; a "Report a problem" button.
+- CVs are personal data. Only the admin can reach the server, and backups are encrypted.
+
+**Slices for the free stack (each one verified before the next):**
+1. ✅ **Web build (2026-10-27):**
+   - `scripts/build-web.mjs` turns the desktop UI into `web-dist/`. `src/web/webapi.js` provides the same `api` on Supabase, with sign-in, invite codes and an account card.
+   - CVs are read in the browser with pdf.js and mammoth; the real CV gives the same profile as the desktop.
+   - Print-to-PDF, and portals open in new tabs.
+   - Verified in headless Edge: the sign-in gate renders, with no console errors.
+2. ✅ **Database:** `supabase/migrations/20261027000000_jobpilot.sql`: the pool, per-user tables, row-level security, invites (15 codes, 15-user cap), `delete_me`, `upsert_pool`/`prune_pool`. Waiting for the user to apply it.
+3. ✅ **Fetcher:** `supabase/functions/fetch-jobs/index.ts`, generated from `sources.js`, `match.js` and `src/web/fetcher.js`.
+   - Handles 3 users per hourly run, with a 50-minute minimum gap. It also refreshes exchange rates and the scoring corpus.
+   - Verified in Node against the real APIs with Supabase faked: 409 jobs, corpus and FX stored, the second call skipped.
+4. **Go live:**
+   - Apply the schema and deploy the function through the GitHub integration;
+   - set the function secrets;
+   - add the pg_cron schedule;
+   - Cloudflare Pages: build `node scripts/build-web.mjs`, output `web-dist`;
+   - an end-to-end check with a test account.
+5. **Mobile layout:** a responsive pass, plus a PWA manifest.
+6. **Launch:** 3 testers first, then up to 15; collect feedback and fix.
+
+**Needs from the user:**
+- A Supabase free account (Singapore region) and its project URL and keys.
+- A choice: make the repo public (GitHub Pages) or keep it private (Cloudflare Pages).
+- A choice: run JobSpy in GitHub Actions (grey area), or go APIs-only online.
+- Testers' emails.
+- Confirmation that the JSearch, Reed and Hunter plans allow use for several people.
+- A check that hosting other people's CVs is fine with their employer, because this project runs on a work laptop and OneDrive.
+
 ## Layout
 - `src/main.js` window, IPC, poller, notifications · `src/db.js` SQLite · `src/sources.js` job APIs
 - `src/match.js` CV parsing → profile, job scoring · `src/recruiters.js` contact extraction
 - `src/ui/` renderer · `test/` `node --test`
 
 ## Out of scope (add when needed)
-Multi-user/server deployment, LLM-based matching, auto-apply, cloud sync.
+Public sign-up beyond the 15 testers, LLM-based matching, auto-apply, cloud sync.

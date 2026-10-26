@@ -118,6 +118,8 @@ document.querySelectorAll('nav [data-tab]').forEach((b) => b.addEventListener('c
 // ---- portals browser
 const wv = $('#portal');
 function browse(url) {
+  // The web version has no <webview> (sites refuse to be embedded): open a new tab instead.
+  if (!wv.loadURL) return api.openExternal(url);
   show('browser');
   wv.src = url;
 }
@@ -411,7 +413,7 @@ async function loadRecruiters() {
   $('#companies').replaceChildren(...(companies.length ? companies.map((c) => h('li', { class: 'company' },
     h('div', { class: 'company-top' }, avatar(c.company), h('div', { class: 'grow' }, h('div', { class: 'strong' }, c.company), h('div', { class: 'help' }, `${c.jobs} matching job${c.jobs > 1 ? 's' : ''}`)), ring(c.best)),
     h('div', { class: 'company-actions' },
-      btn('Find HR contacts', 'mail', guard(async (e) => {
+      api.findCompanyContacts && btn('Find HR contacts', 'mail', guard(async (e) => {
         const b = e.currentTarget;
         b.disabled = true;
         try {

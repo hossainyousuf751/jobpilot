@@ -615,3 +615,16 @@ fieldset.card > legend + * { clear: both; }
 .empty .btn .i { width: 16px; height: 16px; stroke-width: 1.75; color: currentColor; }
 .studio-split > *, .studio-stage-col { min-width: 0; }
 .coach-head .chip { white-space: nowrap; }
+
+/* ---- web version (html.web): sign-in gate, account card; desktop-only parts hidden */
+.web nav [data-tab="browser"], .web #keysForm { display: none; }
+.auth-gate { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: var(--s4); background: var(--bg); }
+.auth-card { width: min(380px, 100%); display: flex; flex-direction: column; gap: var(--s3); padding: var(--s5); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); }
+.auth-brand { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--s2); }
+.auth-brand strong { font-size: 22px; background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.auth-brand span, .auth-card .help { color: var(--text-3); font-size: 12px; }
+.auth-msg { min-height: 1em; margin: 0; color: var(--danger); font-size: 12px; }
+.auth-msg:empty { display: none; }
+.card.account { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.card.account .grow { flex: 1; min-width: 160px; }
+.btn-danger { color: var(--danger); }

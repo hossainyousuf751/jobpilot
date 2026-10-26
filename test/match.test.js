@@ -478,7 +478,7 @@ test('source files contain no stray control characters', () => {
   // Generated edits once turned regex `\b` into backspace (0x08), silently breaking matches.
   const fs = require('fs'), path = require('path');
   const root = path.join(__dirname, '..');
-  const files = ['src', 'src/ui'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|py|html|css)$/.test(f)).map((f) => path.join(d, f)));
+  const files = ['src', 'src/ui', 'src/web'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|py|html|css)$/.test(f)).map((f) => path.join(d, f)));
   for (const f of files) {
     const bad = [...fs.readFileSync(path.join(root, f), 'utf8')].filter((c) => { const n = c.charCodeAt(0); return n < 32 && n !== 9 && n !== 10 && n !== 13; });
     assert.equal(bad.length, 0, `${f} has control characters`);
@@ -574,4 +574,15 @@ test('documents: create, list by kind, update, delete', () => {
 test('contacts from description', () => {
   const c = contactsFromText('Apply to jane.smith@acme.com or see linkedin.com/in/jane-smith-123 / noreply@x.com');
   assert.deepEqual(c.map((x) => x.email || x.profile_url), ['jane.smith@acme.com', 'https://www.linkedin.com/in/jane-smith-123']);
+});
+
+test('web: corpus survives the JSON round trip the online fetcher uses, so scores match the desktop', () => {
+  const { buildCorpus, corpusToJson, corpusFromJson, scoreJob, buildProfile } = require('../src/match');
+  const jobs = Array.from({ length: 12 }, (_, i) => ({ title: i % 2 ? 'Data Analyst' : 'Internal Auditor', company: `Co${i}`, location: 'Dhaka, Bangladesh',
+    description: `SQL Excel Power BI audit reporting ${i % 3 ? 'reconciliation' : 'forecasting'}`, salary: `BDT ${40000 + i * 1000} / month` }));
+  const p = { ...require('../src/match').DEFAULT_PROFILE, ...buildProfile('Data Analyst\nProfessional Experience\nData Analyst at WSD 2022 - Present\nSQL, Excel, Power BI, audit, reconciliation'), locations: ['Dhaka, Bangladesh'] };
+  const direct = buildCorpus(jobs), viaJson = corpusFromJson(JSON.parse(JSON.stringify(corpusToJson(direct))));
+  const job = { ...jobs[1], id: 't:1', url: 'https://x', posted_at: '' };
+  assert.equal(scoreJob(p, job, viaJson).score, scoreJob(p, job, direct).score);
+  assert.deepEqual(require('../src/insights').jobFilters({ scope: 'x', days: 5, q: ' sql ' }), { scope: 'matches', minScore: 0, q: 'sql', location: '', days: 0, workplace: '', jobType: '', salaryOnly: false, sort: 'match' });
 });

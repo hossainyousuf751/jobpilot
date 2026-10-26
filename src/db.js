@@ -1,16 +1,5 @@
 const { DatabaseSync } = require('node:sqlite');
-
-// Same title at the same company (first word of its name) on several sites: keep the best-scoring one,
-// remember the other sites in `also`. ponytail: O(n²) over ≤500 rows; key a Map if the feed limit grows.
-const dupKey = (j) => `${j.title.toLowerCase().replace(/\W+/g, ' ').trim()}|${(j.company || '').toLowerCase().split(/\W+/)[0]}`;
-function dedupe(list, j) {
-  const i = list.findIndex((x) => dupKey(x) === dupKey(j));
-  if (i < 0) return list.push({ ...j, also: [] }), list;
-  const [keep, drop] = j.score > list[i].score ? [{ ...j, also: list[i].also }, list[i]] : [list[i], j];
-  keep.also = [...new Set([...keep.also, drop.source])].filter((s) => s !== keep.source);
-  list[i] = keep;
-  return list;
-}
+const { dedupe } = require('./insights');
 
 function open(file) {
   const db = new DatabaseSync(file);

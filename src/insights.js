@@ -12,6 +12,30 @@ function parseSalary(s) {
   return { currency: m[1] || '', lo: n(m[2]), hi: m[3] ? n(m[3]) : n(m[2]), period: m[4] || '' };
 }
 
+// Same title at the same company (first word of its name) on several sites: keep the best-scoring one,
+// remember the other sites in `also`. ponytail: O(n²) over ≤500 rows; key a Map if the feed limit grows.
+const dupKey = (j) => `${j.title.toLowerCase().replace(/\W+/g, ' ').trim()}|${(j.company || '').toLowerCase().split(/\W+/)[0]}`;
+function dedupe(list, j) {
+  const i = list.findIndex((x) => dupKey(x) === dupKey(j));
+  if (i < 0) return list.push({ ...j, also: [] }), list;
+  const [keep, drop] = j.score > list[i].score ? [{ ...j, also: list[i].also }, list[i]] : [list[i], j];
+  keep.also = [...new Set([...keep.also, drop.source])].filter((s) => s !== keep.source);
+  list[i] = keep;
+  return list;
+}
+
+// Feed filters from the UI (untrusted) → validated filters for listJobs.
+function jobFilters(f = {}) {
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  return {
+    scope: f.scope === 'all' ? 'all' : 'matches', minScore: Math.max(0, Math.min(100, +f.minScore || 0)),
+    q: str(f.q, 100), location: str(f.location, 60), days: [1, 3, 7, 30].includes(+f.days) ? +f.days : 0,
+    workplace: ['remote', 'onsite'].includes(f.workplace) ? f.workplace : '',
+    jobType: ['fulltime', 'parttime', 'contract', 'internship', 'temporary'].includes(f.jobType) ? f.jobType : '',
+    salaryOnly: !!f.salaryOnly, sort: f.sort === 'newest' ? 'newest' : 'match',
+  };
+}
+
 // What changed since lastSeen and what to do next.
 function briefing({ matches, mine, queue, lastSeen, now = Date.now() }) {
   const seen = ts(lastSeen) || now - DAY;
@@ -64,4 +88,4 @@ function insights(matches, now = Date.now()) {
   return { skills, salaries, perDay, sources, total: matches.length };
 }
 
-module.exports = { parseSalary, briefing, insights };
+module.exports = { parseSalary, briefing, insights, dedupe, jobFilters };

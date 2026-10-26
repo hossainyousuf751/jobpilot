@@ -2,16 +2,14 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, safeStorage, shell } 
 const fs = require('node:fs');
 const path = require('node:path');
 const { open } = require('./db');
-const { fetchAll, hunterContacts, fetchRates, parseRates } = require('./sources');
-const { buildProfile, buildCorpus, scoreJob, calibrate, PRIOR_WEIGHTS } = require('./match');
-const { briefing, insights } = require('./insights');
+const { fetchAll, cleanJob, hunterContacts, fetchRates, parseRates } = require('./sources');
+const { DEFAULT_PROFILE, profileFromForm, buildProfile, buildCorpus, scoreJob, calibrate, PRIOR_WEIGHTS } = require('./match');
+const { briefing, insights, jobFilters } = require('./insights');
 const { newCv, parseCvText, uid } = require('./cvdoc');
 const { pathToFileURL } = require('node:url');
 const { contactsFromText, peopleSearchUrl, HIRING_TEAM_SCRIPT } = require('./recruiters');
 
 const POLL_MS = 30 * 60 * 1000;
-const DEFAULT_PROFILE = { name: '', education: null, expectedSalary: null, calibration: null, skills: [], years: 0, roles: [], suggestedRoles: [], cvTerms: {}, locations: [], distanceKm: 50, relocate: [], remoteFrom: [],
-  needsSponsorship: false, minScore: 50, adzunaCountry: 'gb' };
 
 let win, db;
 const file = (name) => path.join(app.getPath('userData'), name);
@@ -61,10 +59,7 @@ async function doRefresh() {
   const fresh = [];
   const corpus = { ...buildCorpus([...db.allJobs(), ...jobs]), fx };
   for (const j of jobs) {
-    j.company_url = isHttp(j.company_url) ? str(j.company_url, 300) : null;
-    j.job_type = /^(fulltime|parttime|contract|internship|temporary)(,(fulltime|parttime|contract|internship|temporary))*$/.test(j.job_type || '') ? j.job_type : null;
-    j.salary = str(j.salary, 60) || null;
-    j.applicants = Number.isInteger(j.applicants) && j.applicants >= 0 && j.applicants < 1e6 ? j.applicants : null;
+    cleanJob(j);
     // Score the fuller text: a refetch can come back without the description the first fetch got.
     const stored = db.description(j.id);
     if (stored.length > (j.description || '').length) j.description = stored;
@@ -147,15 +142,7 @@ const handlers = {
   },
 
   saveProfile(_, input) {
-    const list = (v) => (Array.isArray(v) ? v : []).map((s) => str(s, 80)).filter(Boolean).slice(0, 200);
-    const p = { ...profile(), skills: list(input.skills), roles: list(input.roles).slice(0, 5), locations: list(input.locations).slice(0, 5),
-      relocate: list(input.relocate).slice(0, 20), remoteFrom: list(input.remoteFrom).slice(0, 10),
-      distanceKm: Math.max(1, Math.min(500, +input.distanceKm || 50)),
-      years: Math.max(0, Math.min(50, +input.years || 0)), minScore: Math.max(0, Math.min(100, +input.minScore || 0)),
-      needsSponsorship: !!input.needsSponsorship, adzunaCountry: str(input.adzunaCountry, 2).toLowerCase() || 'gb',
-      education: [1, 2, 3, 4].includes(+input.education) ? +input.education : null,
-      expectedSalary: +input.salaryAmount > 0 && /^[A-Z]{3}$/.test(str(input.salaryCurrency, 3).toUpperCase()) && ['month', 'year'].includes(input.salaryPeriod)
-        ? { amount: Math.min(1e9, +input.salaryAmount), currency: str(input.salaryCurrency, 3).toUpperCase(), period: input.salaryPeriod } : null };
+    const p = profileFromForm(profile(), input);
     db.saveProfile(p);
     rescoreAll();
     return p;
@@ -169,13 +156,7 @@ const handlers = {
   },
 
   refresh: () => refresh(),
-  listJobs: (_, f = {}) => db.listJobs({
-    scope: f.scope === 'all' ? 'all' : 'matches', minScore: Math.max(0, Math.min(100, +f.minScore || 0)),
-    q: str(f.q, 100), location: str(f.location, 60), days: [1, 3, 7, 30].includes(+f.days) ? +f.days : 0,
-    workplace: ['remote', 'onsite'].includes(f.workplace) ? f.workplace : '',
-    jobType: ['fulltime', 'parttime', 'contract', 'internship', 'temporary'].includes(f.jobType) ? f.jobType : '',
-    salaryOnly: !!f.salaryOnly, sort: f.sort === 'newest' ? 'newest' : 'match',
-  }),
+  listJobs: (_, f) => db.listJobs(jobFilters(f)),
   getJob: (_, id) => db.getJob(str(id)),
   myJobs: () => db.myJobs(),
   reviewQueue: () => db.listJobs({ scope: 'matches', minScore: profile().minScore, unreviewed: true, sort: 'match' }),

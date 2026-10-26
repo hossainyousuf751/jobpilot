@@ -161,6 +161,11 @@ function buildCorpus(jobs) {
   return { n: jobs.length, df, noise, payMedian: new Map([...pay].filter(([, xs]) => xs.length >= 5).map(([k, xs]) => [k, median(xs)])) };
 }
 
+// The online fetcher stores the corpus as JSON; terms seen in one job only are dropped to keep it small
+// (they count as df 0, which barely changes their weight).
+const corpusToJson = (c) => ({ n: c.n, df: Object.fromEntries([...c.df].filter(([, v]) => v > 1)), noise: [...c.noise], payMedian: Object.fromEntries(c.payMedian) });
+const corpusFromJson = (j) => ({ n: j.n || 0, df: new Map(Object.entries(j.df || {})), noise: new Set(j.noise || []), payMedian: new Map(Object.entries(j.payMedian || {})) });
+
 function cvSimilarity(cvTerms, job, corpus) {
   const idf = (w) => Math.log((corpus.n + 1) / ((corpus.df.get(w) || 0) + 1));
   const vec = (entries) => {
@@ -408,6 +413,24 @@ function scoreJob(p, job, corpus, now = Date.now(), weights = p.calibration?.act
 
 // ---- Calibration: learn metric weights from the user's own decisions, and measure the agreement honestly.
 // AUC = chance that a random kept job outscores a random dropped one (0.5 = coin flip, 1 = perfect).
+const DEFAULT_PROFILE = { name: '', education: null, expectedSalary: null, calibration: null, skills: [], years: 0, roles: [], suggestedRoles: [], cvTerms: {}, locations: [], distanceKm: 50, relocate: [], remoteFrom: [],
+  needsSponsorship: false, minScore: 50, adzunaCountry: 'gb' };
+
+// Profile form → validated profile (shared by the desktop app and the web version). Input is untrusted.
+function profileFromForm(current, input) {
+  const str = (v, max = 300) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const list = (v) => (Array.isArray(v) ? v : []).map((s) => str(s, 80)).filter(Boolean).slice(0, 200);
+  const p = { ...current, skills: list(input.skills), roles: list(input.roles).slice(0, 5), locations: list(input.locations).slice(0, 5),
+    relocate: list(input.relocate).slice(0, 20), remoteFrom: list(input.remoteFrom).slice(0, 10),
+    distanceKm: Math.max(1, Math.min(500, +input.distanceKm || 50)),
+    years: Math.max(0, Math.min(50, +input.years || 0)), minScore: Math.max(0, Math.min(100, +input.minScore || 0)),
+    needsSponsorship: !!input.needsSponsorship, adzunaCountry: str(input.adzunaCountry, 2).toLowerCase() || 'gb',
+    education: [1, 2, 3, 4].includes(+input.education) ? +input.education : null,
+    expectedSalary: +input.salaryAmount > 0 && /^[A-Z]{3}$/.test(str(input.salaryCurrency, 3).toUpperCase()) && ['month', 'year'].includes(input.salaryPeriod)
+      ? { amount: Math.min(1e9, +input.salaryAmount), currency: str(input.salaryCurrency, 3).toUpperCase(), period: input.salaryPeriod } : null };
+  return p;
+}
+
 function auc(rows) {
   const pos = rows.filter((r) => r.label === 1), neg = rows.filter((r) => r.label === 0);
   if (!pos.length || !neg.length) return null;
@@ -459,4 +482,4 @@ function calibrate(samples, prior = PRIOR_WEIGHTS) {
   return { ...base, active: true, weights: fitWeights(samples, prior), aucPrior: auc(rows(prior)), aucLearned: auc(rows(heldOut)) };
 }
 
-module.exports = { SKILLS, METRICS, PRIOR_WEIGHTS, findSkills, cvYears, detectRoles, suggestRoles, buildProfile, buildCorpus, jobYears, scoreJob, combine, calibrate, auc };
+module.exports = { DEFAULT_PROFILE, profileFromForm, SKILLS, METRICS, PRIOR_WEIGHTS, findSkills, cvYears, detectRoles, suggestRoles, buildProfile, buildCorpus, corpusToJson, corpusFromJson, parseTime, jobYears, scoreJob, combine, calibrate, auc };

@@ -22,7 +22,7 @@ const text = (html = '') => html.replace(/<(br|\/p|\/li|\/div)[^>]*>/gi, '\n').r
 
 // In Electron use Chromium's stack: honours system proxy and corporate root certs.
 // Resolved per call (not at load) so tests can stub global fetch.
-const doFetch = (...a) => (process.versions.electron ? require('electron').net.fetch : fetch)(...a);
+const doFetch = (...a) => (globalThis.process?.versions?.electron ? require('electron').net.fetch : fetch)(...a);
 
 async function get(url, headers = {}) {
   const res = await doFetch(url, { headers: { 'User-Agent': 'JobPilot/1.0 (personal job search)', ...headers }, signal: AbortSignal.timeout(20000) });
@@ -173,10 +173,21 @@ const SOURCES = {
   },
 };
 
+// Optional fields from external data: keep only valid values (in place).
+function cleanJob(j) {
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  j.company_url = /^https?:///i.test(j.company_url || '') ? str(j.company_url, 300) : null;
+  j.job_type = /^(fulltime|parttime|contract|internship|temporary)(,(fulltime|parttime|contract|internship|temporary))*$/.test(j.job_type || '') ? j.job_type : null;
+  j.salary = str(j.salary, 60) || null;
+  j.applicants = Number.isInteger(j.applicants) && j.applicants >= 0 && j.applicants < 1e6 ? j.applicants : null;
+  return j;
+}
+
 // One failing source never breaks the feed; status says what happened per source.
-async function fetchAll(profile, secrets, tick = 0) {
+// skip: source names not to run (the online fetcher has no Python, so no JobSpy).
+async function fetchAll(profile, secrets, tick = 0, skip = []) {
   const qs = (profile.roles?.length ? profile.roles : profile.skills.slice(0, 2)).slice(0, 5);
-  const names = Object.keys(SOURCES);
+  const names = Object.keys(SOURCES).filter((n) => !skip.includes(n));
   const results = await Promise.allSettled(names.map((n) => SOURCES[n](qs, profile, secrets, tick)));
   const jobs = [], status = {};
   results.forEach((r, i) => {
@@ -236,4 +247,4 @@ async function hunterContacts(company, companyUrl, key) {
   }));
 }
 
-module.exports = { SOURCES, fetchAll, fetchRates, parseRates, searchTargets, jobType, salaryText, companyDomain, sameCompany, hunterContacts };
+module.exports = { SOURCES, fetchAll, cleanJob, fetchRates, parseRates, searchTargets, jobType, salaryText, companyDomain, sameCompany, hunterContacts };
