@@ -37,6 +37,18 @@ def val(v):
     return None if v is None or v != v else v  # NaN != NaN
 
 
+PER = {"yearly": "year", "monthly": "month", "weekly": "week", "daily": "day", "hourly": "hour"}
+
+
+def salary(r):
+    """'BDT 25,000-40,000 / month' from JobSpy's amount columns, or None."""
+    lo, hi, cur, per = (val(r.get(k)) for k in ("min_amount", "max_amount", "currency", "interval"))
+    if not lo and not hi:
+        return None
+    amount = f"{int(lo):,}-{int(hi):,}" if lo and hi and lo != hi else f"{int(lo or hi):,}"
+    return " ".join(x for x in (cur, amount) if x) + (f" / {PER.get(per, per)}" if per else "")
+
+
 def emails(v):
     """JobSpy gives a list or a comma-joined string."""
     v = val(v)
@@ -67,6 +79,8 @@ def site_jobs(scrape_jobs, site, plan, args):
                         "posted_at": str(val(r.get("date_posted")) or ""),
                         "emails": emails(r.get("emails")),
                         "company_url": val(r.get("company_url_direct")),  # not the board's company page
+                        "job_type": val(r.get("job_type")),
+                        "salary": salary(r),
                     })
         except Exception as e:
             errors[f"{site} ({location or 'any'})"] = str(e)[:200]
@@ -99,6 +113,9 @@ def selftest():
     assert sites_for("London, United Kingdom", countries) == (["linkedin", "indeed", "glassdoor"], "uk")
     assert sites_for("Qatar", countries) == (["linkedin", "bayt"], "usa")
     assert sites_for("", countries)[0] == ["linkedin", "indeed", "glassdoor"]
+    assert salary({"min_amount": 25000.0, "max_amount": 40000.0, "currency": "BDT", "interval": "monthly"}) == "BDT 25,000-40,000 / month"
+    assert salary({"min_amount": float("nan"), "max_amount": None}) is None
+    assert salary({"min_amount": 4000.0, "max_amount": float("nan"), "currency": "AED", "interval": "monthly"}) == "AED 4,000 / month"
     assert emails("a@x.com, b@y.org") == ["a@x.com", "b@y.org"] and emails(float("nan")) == [] and emails(["c@z.io"]) == ["c@z.io"]
     print("selftest ok")
 

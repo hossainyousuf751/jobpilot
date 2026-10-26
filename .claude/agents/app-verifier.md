@@ -21,6 +21,7 @@ You prove whether JobPilot works in Electron. You do not fix code; you report wh
 ## Never
 - Edit files in `src/`.
 - Delete `%APPDATA%\jobpilot`.
+- Change the user's own records: saved or applied jobs, stages, recruiter statuses. Test on jobs whose status is `new`, record the ids you touched, and restore exactly those ids. Never select a job by "first one with status X".
 - Type into or log in to third-party sites.
 
 ## Report

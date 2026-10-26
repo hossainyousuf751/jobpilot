@@ -7,88 +7,280 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav aria-label="Main">
-    <h1>JobPilot</h1>
-    <button data-tab="feed" class="active">Live feed <span id="feedCount" class="muted"></span></button>
-    <button data-tab="alerts">Alerts <span id="alertCount" class="badge" hidden></span></button>
-    <button data-tab="recruiters">Recruiters</button>
-    <button data-tab="browser">Portals</button>
-    <button data-tab="profile">Profile &amp; CV</button>
-    <div id="status" class="muted" aria-live="polite"></div>
-  </nav>
+  <!-- Icon set (24px grid, 1.75 stroke). Used via <svg><use href="#i-name"/></svg>. -->
+  <svg xmlns="http://www.w3.org/2000/svg" hidden>
+    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M3 12l7-7v4h6a5 5 0 0 1 0 10h-2" /><path d="M10 19l-4-4 4-4" /></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" /></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18" /></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2A6.5 6.5 0 0 1 21.5 20" /></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4" /><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16M20 20v-4h-4" /></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z" /></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-3 4.2M6.6 6.6C4.4 8 2.8 10.1 2 12c1 2.5 5 7 10 7a9.6 9.6 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5l8.5 6.5 8.5-6.5" /></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" /><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3M15 8l2 2" /></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
+    <symbol id="i-money" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 9.5v.01M18 14.5v.01" /></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M2 21h20" /><path d="M8 8h3M8 12h3M8 16h3" /></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" /></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z" /><path d="M12 10v4M12 17v.01" /></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8v.01" /></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" /></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" /></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M9 12l2 2 4-4" /></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" /><path d="M3 13h5l1.5 2.5h5L16 13h5" /></symbol>
+  </svg>
+
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark"><svg class="i"><use href="#i-logo" /></svg></span><span>JobPilot</span></div>
+    <button id="openPalette" class="jump" type="button"><svg class="i"><use href="#i-search" /></svg><span>Search or jump to…</span><kbd>Ctrl K</kbd></button>
+    <nav aria-label="Main">
+      <button data-tab="today" class="active"><svg class="i"><use href="#i-sun" /></svg><span>Today</span></button>
+      <button data-tab="review"><svg class="i"><use href="#i-layers" /></svg><span>Review</span><span id="reviewCount" class="count"></span></button>
+      <div class="nav-group">Discover</div>
+      <button data-tab="feed"><svg class="i"><use href="#i-target" /></svg><span>Matches</span><span id="matchCount" class="count"></span></button>
+      <button data-tab="all"><svg class="i"><use href="#i-list" /></svg><span>All jobs</span><span id="allCount" class="count"></span></button>
+      <div class="nav-group">Track</div>
+      <button data-tab="myjobs"><svg class="i"><use href="#i-briefcase" /></svg><span>My jobs</span><span id="myCount" class="count"></span></button>
+      <button data-tab="alerts"><svg class="i"><use href="#i-bell" /></svg><span>Alerts</span><span id="alertCount" class="count badge" hidden></span></button>
+      <button data-tab="recruiters"><svg class="i"><use href="#i-users" /></svg><span>Recruiters</span></button>
+      <button data-tab="insights"><svg class="i"><use href="#i-chart" /></svg><span>Insights</span></button>
+      <div class="nav-group">Tools</div>
+      <button data-tab="browser"><svg class="i"><use href="#i-globe" /></svg><span>Portals</span></button>
+      <button data-tab="profile"><svg class="i"><use href="#i-user" /></svg><span>Profile &amp; CV</span></button>
+    </nav>
+    <div class="private"><svg class="i"><use href="#i-shield" /></svg>On-device · nothing leaves this PC</div>
+    <div class="sync" id="sync" aria-live="polite">
+      <div class="sync-row"><span id="syncDot" class="dot"></span><span id="syncText">Waiting for first refresh</span></div>
+      <div id="syncSources" class="sync-sources"></div>
+    </div>
+  </aside>
 
   <main>
-    <section id="feed">
-      <header class="bar">
-        <input id="q" type="search" placeholder="Filter by title, company, skill…" aria-label="Filter jobs">
-        <label>Min score <input id="minScore" type="number" min="0" max="100" step="5"></label>
-        <label><input id="showIneligible" type="checkbox"> Show ineligible</label>
-        <button id="refresh" class="primary">Refresh now</button>
+    <div id="progress" class="progress" hidden><span></span></div>
+
+    <section id="today" class="page">
+      <header class="hero">
+        <div class="hero-text">
+          <p id="todayDate" class="eyebrow"></p>
+          <h1 id="greeting">Welcome back</h1>
+          <p id="todaySummary" class="hero-sub"></p>
+        </div>
+        <div id="todayPulse" class="pulse" aria-label="New matches per day, last 14 days"></div>
       </header>
-      <ul id="jobs" class="list"></ul>
+      <div id="todayActions" class="action-grid"></div>
+      <div class="today-cols">
+        <div><h2 class="section-title">Fresh strong fits</h2><div id="todayFits" class="fit-strip"></div></div>
+        <div><h2 class="section-title">Pipeline</h2><div id="todayPipeline" class="flow"></div></div>
+      </div>
     </section>
 
-    <section id="alerts" hidden>
-      <header class="bar"><h2>New matches</h2><button id="readAll">Mark all read</button></header>
-      <ul id="alertList" class="list"></ul>
+    <section id="review" class="page" hidden>
+      <header class="page-head">
+        <div><h1>Review</h1><p class="sub">One decision per job. Drag the card, or use <kbd>←</kbd> pass · <kbd>→</kbd> save · <kbd>↑</kbd> open · <kbd>↓</kbd> hide · <kbd>Ctrl Z</kbd> undo.</p></div>
+        <div class="review-progress"><span id="reviewProgressText"></span><div class="meter"><span id="reviewMeter"></span></div></div>
+      </header>
+      <div id="deck" class="deck" aria-live="polite"></div>
+      <div class="deck-controls">
+        <button id="deckPass" class="deck-btn" type="button" aria-label="Pass (left arrow)"><svg class="i"><use href="#i-x" /></svg><span>Pass</span></button>
+        <button id="deckUndo" class="deck-btn small" type="button" aria-label="Undo (Ctrl+Z)"><svg class="i"><use href="#i-undo" /></svg></button>
+        <button id="deckOpen" class="deck-btn small" type="button" aria-label="Open posting (up arrow)"><svg class="i"><use href="#i-external" /></svg></button>
+        <button id="deckSave" class="deck-btn primary" type="button" aria-label="Save (right arrow)"><svg class="i"><use href="#i-bookmark" /></svg><span>Save</span></button>
+      </div>
     </section>
 
-    <section id="recruiters" hidden>
-      <h2>People</h2>
-      <p class="muted">Pulled from job descriptions and from the hiring-team box on LinkedIn job pages you open in Portals.</p>
-      <ul id="people" class="list"></ul>
-      <h2>Companies hiring for your profile</h2>
-      <ul id="companies" class="list grid"></ul>
+    <section id="insights" class="page" hidden>
+      <header class="page-head">
+        <div><h1>Insights</h1><p class="sub">Your market, computed on this PC from the jobs you match.</p></div>
+      </header>
+      <div id="insightGrid" class="insight-grid"></div>
+    </section>
+
+    <section id="feed" class="page" hidden>
+      <header class="page-head">
+        <div>
+          <h1 id="feedTitle">Matches</h1>
+          <p id="feedSub" class="sub">Jobs you're eligible for, ranked by how well they fit your CV.</p>
+        </div>
+        <button id="refresh" class="btn btn-primary"><svg class="i"><use href="#i-refresh" /></svg><span>Refresh</span></button>
+      </header>
+
+      <div id="kpis" class="kpis" aria-label="Overview"></div>
+
+      <div class="toolbar">
+        <label class="field field-search"><svg class="i"><use href="#i-search" /></svg>
+          <input id="q" type="search" placeholder="Search title, company, description" aria-label="Search jobs"><kbd>/</kbd></label>
+        <label class="field field-where"><svg class="i"><use href="#i-pin" /></svg>
+          <input id="where" type="search" placeholder="Location" aria-label="Location"></label>
+        <select id="days" class="select" aria-label="Date posted">
+          <option value="0">Any time</option><option value="1">Past 24 hours</option><option value="3">Past 3 days</option>
+          <option value="7">Past week</option><option value="30">Past month</option>
+        </select>
+        <select id="workplace" class="select" aria-label="Workplace">
+          <option value="">Any workplace</option><option value="remote">Remote</option><option value="onsite">On-site</option>
+        </select>
+        <select id="jobType" class="select" aria-label="Job type">
+          <option value="">Any type</option><option value="fulltime">Full-time</option><option value="parttime">Part-time</option>
+          <option value="contract">Contract</option><option value="internship">Internship</option><option value="temporary">Temporary</option>
+        </select>
+        <label class="toggle"><input id="salaryOnly" type="checkbox"><span class="toggle-track"></span>Salary listed</label>
+        <span class="toolbar-spacer"></span>
+        <label id="minScoreLabel" class="inline">Min score <input id="minScore" class="num" type="number" min="0" max="100" step="5"></label>
+        <select id="sort" class="select" aria-label="Sort by"><option value="match">Best match</option><option value="newest">Newest</option></select>
+      </div>
+      <div class="result-bar"><span id="resultCount" aria-live="polite"></span><button id="clearFilters" class="btn-link" hidden>Clear filters</button>
+        <span class="hint"><kbd>J</kbd><kbd>K</kbd> move · <kbd>S</kbd> save · <kbd>H</kbd> hide · <kbd>Enter</kbd> open</span></div>
+
+      <div class="split">
+        <ul id="jobs" class="job-list" aria-label="Jobs"></ul>
+        <aside id="detail" class="detail" aria-label="Job details"></aside>
+      </div>
+    </section>
+
+    <section id="myjobs" class="page" hidden>
+      <header class="page-head">
+        <div><h1>My jobs</h1><p class="sub">Your pipeline. Drag a card to move it to the next stage; saved and applied jobs are never pruned.</p></div>
+      </header>
+      <div id="board" class="board"></div>
+    </section>
+
+    <section id="alerts" class="page" hidden>
+      <header class="page-head">
+        <div><h1>Alerts</h1><p class="sub">New eligible jobs above your alert score, newest first.</p></div>
+        <button id="readAll" class="btn"><svg class="i"><use href="#i-check" /></svg><span>Mark all read</span></button>
+      </header>
+      <ul id="alertList" class="panel rows"></ul>
+    </section>
+
+    <section id="recruiters" class="page" hidden>
+      <header class="page-head">
+        <div><h1>Recruiters</h1><p class="sub">From job postings, the LinkedIn hiring-team box on pages you open, and Hunter.io HR searches.</p></div>
+      </header>
+      <h2 class="section-title">People</h2>
+      <div class="panel"><table class="table"><thead><tr><th>Name</th><th>Company</th><th>Found via</th><th>Status</th><th class="right">Actions</th></tr></thead><tbody id="people"></tbody></table></div>
+      <h2 class="section-title">Companies hiring for your profile</h2>
+      <ul id="companies" class="company-grid"></ul>
     </section>
 
     <section id="browser" hidden>
-      <header class="bar">
-        <button id="back" aria-label="Back">◀</button>
-        <button id="fwd" aria-label="Forward">▶</button>
-        <button id="reload" aria-label="Reload">⟳</button>
-        <input id="url" type="url" aria-label="Address">
-        <button data-go="https://www.linkedin.com/jobs/">LinkedIn</button>
-        <button data-go="https://www.indeed.com/">Indeed</button>
-        <button data-go="https://www.glassdoor.com/Job/">Glassdoor</button>
-        <button id="extern" title="Open in system browser">↗</button>
+      <header class="browser-bar">
+        <button id="back" class="icon-btn" aria-label="Back"><svg class="i"><use href="#i-left" /></svg></button>
+        <button id="fwd" class="icon-btn" aria-label="Forward"><svg class="i"><use href="#i-right" /></svg></button>
+        <button id="reload" class="icon-btn" aria-label="Reload"><svg class="i"><use href="#i-refresh" /></svg></button>
+        <label class="field field-url"><svg class="i"><use href="#i-globe" /></svg><input id="url" type="url" aria-label="Address"></label>
+        <div class="segmented">
+          <button data-go="https://www.linkedin.com/jobs/">LinkedIn</button>
+          <button data-go="https://www.indeed.com/">Indeed</button>
+          <button data-go="https://www.glassdoor.com/Job/">Glassdoor</button>
+          <button data-go="https://www.bdjobs.com/">Bdjobs</button>
+        </div>
+        <button id="extern" class="icon-btn" aria-label="Open in system browser" title="Open in system browser"><svg class="i"><use href="#i-external" /></svg></button>
       </header>
       <webview id="portal" partition="persist:portals" src="about:blank"></webview>
     </section>
 
-    <section id="profile" hidden>
-      <header class="bar"><button id="upload" class="primary">Upload CV (PDF / DOCX / TXT)</button><span id="cvFile" class="muted"></span></header>
-      <form id="profileForm">
-        <label>Skills (comma separated)<textarea name="skills" rows="4"></textarea></label>
-        <label>Target roles, used as search queries (max 5)<input name="roles"></label>
-        <div class="row">
-          <label>Years of experience<input name="years" type="number" min="0" max="50"></label>
-          <label>Alert when score ≥<input name="minScore" type="number" min="0" max="100"></label>
-          <label>Adzuna country code<input name="adzunaCountry" maxlength="2"></label>
+    <section id="profile" class="page" hidden>
+      <header class="page-head">
+        <div><h1>Profile &amp; CV</h1><p class="sub">What JobPilot searches for and how it decides you're eligible. Saving re-scores every job.</p></div>
+        <button form="profileForm" class="btn btn-primary"><svg class="i"><use href="#i-check" /></svg><span>Save profile</span></button>
+      </header>
+
+      <div class="settings">
+        <div class="card cv-card">
+          <div class="cv-icon"><svg class="i"><use href="#i-file" /></svg></div>
+          <div class="grow"><div id="cvFile" class="strong">No CV uploaded yet</div><div id="cvMeta" class="muted"></div></div>
+          <button id="upload" class="btn"><svg class="i"><use href="#i-upload" /></svg><span>Upload CV</span></button>
         </div>
-        <p class="muted">Locations are separated by semicolons. All blank = anywhere.</p>
-        <div class="row">
-          <label>On-site: "City, Country" (first one is searched)<input name="locations" placeholder="Dhaka, Bangladesh"></label>
-          <label>Search radius (km)<input name="distanceKm" type="number" min="1" max="500"></label>
-        </div>
-        <label>Would relocate to: countries, one searched per refresh in turn<input name="relocate" placeholder="UAE; Saudi Arabia; Qatar; Singapore; Malaysia; UK"></label>
-        <label>Remote jobs limited to these regions are OK (your on-site countries always are)<input name="remoteFrom" placeholder="APAC; Asia; South Asia"></label>
-        <label class="check"><input name="needsSponsorship" type="checkbox"> I need visa sponsorship</label>
-        <button class="primary">Save profile</button>
-      </form>
-      <form id="keysForm">
-        <h2>API keys <span class="muted">(encrypted with your OS keychain)</span></h2>
-        <p class="muted">JSearch brings in LinkedIn, Indeed and Glassdoor listings. Get a free key at rapidapi.com → JSearch. Adzuna keys: developer.adzuna.com.</p>
-        <label>JSearch (RapidAPI) key <span data-key="jsearchKey"></span><input name="jsearchKey" type="password" autocomplete="off"></label>
-        <div class="row">
-          <label>Adzuna app id <span data-key="adzunaId"></span><input name="adzunaId" autocomplete="off"></label>
-          <label>Adzuna app key <span data-key="adzunaKey"></span><input name="adzunaKey" type="password" autocomplete="off"></label>
-        </div>
-        <label>Hunter.io key: finds HR contacts per hiring company (Recruiters tab, on demand) <span data-key="hunterKey"></span><input name="hunterKey" type="password" autocomplete="off"></label>
-        <button>Save keys</button>
-      </form>
+
+        <form id="profileForm" class="settings-form">
+          <fieldset class="card">
+            <legend>Target roles</legend>
+            <p class="help">Used as search terms, one per refresh in turn. Up to 5, comma separated.</p>
+            <input name="roles" aria-label="Target roles">
+            <div id="roleSuggest" class="suggest"></div>
+          </fieldset>
+
+          <fieldset class="card">
+            <legend>Skills &amp; experience</legend>
+            <label>Skills <span class="help">comma separated</span><textarea name="skills" rows="4"></textarea></label>
+            <div class="grid-3">
+              <label>Years of experience<input name="years" type="number" min="0" max="50"></label>
+              <label>Alert when score ≥<input name="minScore" type="number" min="0" max="100"></label>
+              <label>Adzuna country<input name="adzunaCountry" maxlength="2"></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="card">
+            <legend>Education &amp; pay</legend>
+            <p class="help">Used by the Education and Pay metrics. Salaries in other currencies are converted at daily exchange rates (Currency-api, no key).</p>
+            <div class="grid-3">
+              <label>Highest degree<select name="education"><option value="">Not set</option><option value="1">Diploma / school</option>
+                <option value="2">Bachelor's</option><option value="3">Master's</option><option value="4">Doctorate</option></select></label>
+              <label>Expected salary<input name="salaryAmount" type="number" min="0" step="1000" placeholder="40000"></label>
+              <div class="pair"><label>Currency<input name="salaryCurrency" maxlength="3" placeholder="BDT"></label>
+                <label>Per<select name="salaryPeriod"><option value="month">month</option><option value="year">year</option></select></label></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="card">
+            <legend>Location &amp; mobility</legend>
+            <p class="help">Separate places with semicolons. Leave all blank to accept anywhere.</p>
+            <div class="grid-2-1">
+              <label>On-site <span class="help">"City, Country"; the first is searched</span><input name="locations" placeholder="Dhaka, Bangladesh; Mirpur, Bangladesh"></label>
+              <label>Search radius (km)<input name="distanceKm" type="number" min="1" max="500"></label>
+            </div>
+            <label>Would relocate to <span class="help">one country searched per refresh</span><input name="relocate" placeholder="UAE; Singapore; UK"></label>
+            <label>Remote jobs limited to these regions are fine<input name="remoteFrom" placeholder="APAC; Asia; South Asia"></label>
+            <label class="toggle"><input name="needsSponsorship" type="checkbox"><span class="toggle-track"></span>I need visa sponsorship</label>
+          </fieldset>
+        </form>
+
+        <form id="keysForm" class="card keys">
+          <h2 class="card-title"><svg class="i"><use href="#i-key" /></svg>Integrations</h2>
+          <p class="help">Keys are encrypted with your Windows account and never leave this PC except to their own service.</p>
+          <div class="key-row"><div><div class="strong">JSearch <span class="pill" data-key="jsearchKey"></span></div><div class="help">LinkedIn, Indeed, Glassdoor via OpenWebNinja (key starts “ak_”) or RapidAPI; searched every 2 h</div></div>
+            <input name="jsearchKey" type="password" autocomplete="off" placeholder="Paste key to set or replace" aria-label="JSearch key"></div>
+          <div class="key-row"><div><div class="strong">Adzuna <span class="pill" data-key="adzunaKey"></span></div><div class="help">App id and key from developer.adzuna.com</div></div>
+            <div class="pair"><input name="adzunaId" autocomplete="off" placeholder="App id" aria-label="Adzuna app id"><input name="adzunaKey" type="password" autocomplete="off" placeholder="App key" aria-label="Adzuna app key"></div></div>
+          <div class="key-row"><div><div class="strong">Reed <span class="pill" data-key="reedKey"></span></div><div class="help">UK jobs with applicant counts; searched every 2 h while the UK is in your locations</div></div>
+            <input name="reedKey" type="password" autocomplete="off" placeholder="Paste key to set or replace" aria-label="Reed key"></div>
+          <div class="key-row"><div><div class="strong">Hunter.io <span class="pill" data-key="hunterKey"></span></div><div class="help">HR contacts per hiring company, on demand</div></div>
+            <input name="hunterKey" type="password" autocomplete="off" placeholder="Paste key to set or replace" aria-label="Hunter key"></div>
+          <div class="right"><button class="btn">Save keys</button></div>
+        </form>
+      </div>
     </section>
   </main>
-  <div id="toast" role="status" hidden></div>
+
+  <dialog id="palette" class="palette" aria-label="Command palette">
+    <label class="palette-input"><svg class="i"><use href="#i-search" /></svg><input id="paletteQ" placeholder="Search jobs, pages and actions" autocomplete="off"><kbd>Esc</kbd></label>
+    <ul id="paletteList" class="palette-list" role="listbox"></ul>
+  </dialog>
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="app.js"></script>
+  <script src="today.js"></script>
+  <script src="review.js"></script>
+  <script src="insights-view.js"></script>
+  <script src="palette.js"></script>
 </body>
 </html>

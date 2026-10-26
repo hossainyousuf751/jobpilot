@@ -2,12 +2,13 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, safeStorage, shell } 
 const fs = require('node:fs');
 const path = require('node:path');
 const { open } = require('./db');
-const { fetchAll, hunterContacts } = require('./sources');
-const { buildProfile, scoreJob } = require('./match');
+const { fetchAll, hunterContacts, fetchRates, parseRates } = require('./sources');
+const { buildProfile, buildCorpus, scoreJob, calibrate, PRIOR_WEIGHTS } = require('./match');
+const { briefing, insights } = require('./insights');
 const { contactsFromText, peopleSearchUrl, HIRING_TEAM_SCRIPT } = require('./recruiters');
 
 const POLL_MS = 30 * 60 * 1000;
-const DEFAULT_PROFILE = { skills: [], years: 0, roles: [], locations: [], distanceKm: 50, relocate: [], remoteFrom: [],
+const DEFAULT_PROFILE = { name: '', education: null, expectedSalary: null, calibration: null, skills: [], years: 0, roles: [], suggestedRoles: [], cvTerms: {}, locations: [], distanceKm: 50, relocate: [], remoteFrom: [],
   needsSponsorship: false, minScore: 50, adzunaCountry: 'gb' };
 
 let win, db;
@@ -27,29 +28,52 @@ const isHttp = (u) => typeof u === 'string' && /^https?:\/\//i.test(u);
 const str = (v, max = 300) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 // Rotation counter starts from the clock so restarts carry on where the schedule is, not from the first country.
+let lastRefresh = null; // shown in the sidebar until the next refresh
+
+// Exchange rates for the pay metric: cached in userData/fx.json, re-fetched at most once a day; stale rates beat none.
+let fx = null;
+function loadFxCache() {
+  try { const d = JSON.parse(fs.readFileSync(file('fx.json'), 'utf8')); const r = parseRates(d); if (r) fx = { ...r, fetched: d.fetched }; } catch { /* first run */ }
+}
+async function updateFx() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (fx?.fetched === today) return;
+  try {
+    const r = await fetchRates();
+    fx = { ...r, fetched: today };
+    fs.writeFileSync(file('fx.json'), JSON.stringify({ date: r.date, fetched: today, usd: r.rates }));
+  } catch (e) { log('warn', 'fx', { err: e.message, using: fx?.date || 'none' }); }
+}
 let running = null, tick = Math.floor(Date.now() / POLL_MS);
 function refresh() {
-  return (running ??= doRefresh().finally(() => { running = null; }));
+  return (running ??= doRefresh().finally(() => { running = null; send('refreshing', false); }));
 }
 
 async function doRefresh() {
   const p = profile();
   if (!p.skills.length) return { error: 'Upload your CV in Profile first.' };
+  send('refreshing', true);
+  await updateFx();
   const firstRun = db.jobCount() === 0;
   const { jobs, status } = await fetchAll(p, loadSecrets(), tick++);
   const fresh = [];
+  const corpus = { ...buildCorpus([...db.allJobs(), ...jobs]), fx };
   for (const j of jobs) {
     j.company_url = isHttp(j.company_url) ? str(j.company_url, 300) : null;
+    j.job_type = /^(fulltime|parttime|contract|internship|temporary)(,(fulltime|parttime|contract|internship|temporary))*$/.test(j.job_type || '') ? j.job_type : null;
+    j.salary = str(j.salary, 60) || null;
+    j.applicants = Number.isInteger(j.applicants) && j.applicants >= 0 && j.applicants < 1e6 ? j.applicants : null;
     // Score the fuller text: a refetch can come back without the description the first fetch got.
     const stored = db.description(j.id);
     if (stored.length > (j.description || '').length) j.description = stored;
-    const m = scoreJob(p, j);
+    const m = scoreJob(p, j, corpus);
     if (db.upsertJob(j, m) && m.eligible && m.score >= p.minScore) fresh.push(j);
     // Emails the job site listed (JobSpy) count like ones found in the description.
     const text = `${j.description || ''}\n${(Array.isArray(j.emails) ? j.emails : []).join(' ')}`;
     if (m.eligible) for (const c of contactsFromText(text)) db.addRecruiter({ ...c, company: j.company, job_id: j.id }, 'job posting');
   }
   db.prune();
+  rescoreAll(); // recalibrate on decisions made since the last refresh
   // First run would alert on everything; just fill the feed.
   if (!firstRun) for (const j of fresh) db.addAlert(j.id);
   if (!firstRun && fresh.length && Notification.isSupported()) {
@@ -59,14 +83,20 @@ async function doRefresh() {
     win.flashFrame(true);
   }
   const result = { at: new Date().toISOString(), fetched: jobs.length, fresh: fresh.length, status };
+  lastRefresh = result;
   log('info', 'refresh', result);
   send('updated', result);
   return result;
 }
 
+// Learn metric weights from the user's decisions first (they use stored per-metric parts, which don't depend on weights),
+// then re-score every job with them. Runs at startup and on each refresh, not on every decision (~1 s for 1,400 jobs).
 function rescoreAll() {
+  const calibration = calibrate(db.decisions());
+  db.saveProfile({ ...profile(), calibration });
   const p = profile();
-  for (const j of db.allJobs()) db.rescore(j.id, scoreJob(p, j));
+  const all = db.allJobs(), corpus = { ...buildCorpus(all), fx };
+  for (const j of all) db.rescore(j.id, scoreJob(p, j, corpus));
 }
 
 const handlers = {
@@ -94,7 +124,10 @@ const handlers = {
       relocate: list(input.relocate).slice(0, 20), remoteFrom: list(input.remoteFrom).slice(0, 10),
       distanceKm: Math.max(1, Math.min(500, +input.distanceKm || 50)),
       years: Math.max(0, Math.min(50, +input.years || 0)), minScore: Math.max(0, Math.min(100, +input.minScore || 0)),
-      needsSponsorship: !!input.needsSponsorship, adzunaCountry: str(input.adzunaCountry, 2).toLowerCase() || 'gb' };
+      needsSponsorship: !!input.needsSponsorship, adzunaCountry: str(input.adzunaCountry, 2).toLowerCase() || 'gb',
+      education: [1, 2, 3, 4].includes(+input.education) ? +input.education : null,
+      expectedSalary: +input.salaryAmount > 0 && /^[A-Z]{3}$/.test(str(input.salaryCurrency, 3).toUpperCase()) && ['month', 'year'].includes(input.salaryPeriod)
+        ? { amount: Math.min(1e9, +input.salaryAmount), currency: str(input.salaryCurrency, 3).toUpperCase(), period: input.salaryPeriod } : null };
     db.saveProfile(p);
     rescoreAll();
     return p;
@@ -103,12 +136,42 @@ const handlers = {
   saveKeys(_, keys) {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('OS encryption unavailable; keys not saved.');
     const s = loadSecrets();
-    for (const k of ['jsearchKey', 'adzunaId', 'adzunaKey', 'hunterKey']) if (str(keys[k])) s[k] = str(keys[k]);
+    for (const k of ['jsearchKey', 'adzunaId', 'adzunaKey', 'hunterKey', 'reedKey']) if (str(keys[k])) s[k] = str(keys[k]);
     fs.writeFileSync(file('secrets.bin'), safeStorage.encryptString(JSON.stringify(s)));
   },
 
   refresh: () => refresh(),
-  listJobs: (_, opts) => db.listJobs(opts),
+  listJobs: (_, f = {}) => db.listJobs({
+    scope: f.scope === 'all' ? 'all' : 'matches', minScore: Math.max(0, Math.min(100, +f.minScore || 0)),
+    q: str(f.q, 100), location: str(f.location, 60), days: [1, 3, 7, 30].includes(+f.days) ? +f.days : 0,
+    workplace: ['remote', 'onsite'].includes(f.workplace) ? f.workplace : '',
+    jobType: ['fulltime', 'parttime', 'contract', 'internship', 'temporary'].includes(f.jobType) ? f.jobType : '',
+    salaryOnly: !!f.salaryOnly, sort: f.sort === 'newest' ? 'newest' : 'match',
+  }),
+  getJob: (_, id) => db.getJob(str(id)),
+  myJobs: () => db.myJobs(),
+  reviewQueue: () => db.listJobs({ scope: 'matches', minScore: profile().minScore, unreviewed: true, sort: 'match' }),
+  markReviewed: (_, id) => db.markReviewed(str(id)),
+  undoReview: (_, id) => db.undoReview(str(id)),
+  briefing(_, lastSeen) {
+    const matches = db.listJobs({ scope: 'matches', minScore: profile().minScore });
+    const queue = db.listJobs({ scope: 'matches', minScore: profile().minScore, unreviewed: true }).length;
+    const seen = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(lastSeen || '') ? lastSeen : null;
+    return briefing({ matches, mine: db.myJobs(), queue, lastSeen: seen });
+  },
+  insights: () => insights(db.listJobs({ scope: 'matches', minScore: profile().minScore })),
+  // Match numbers come from the same de-duplicated list the feed shows, so tiles and list agree.
+  stats() {
+    const min = profile().minScore, list = db.listJobs({ scope: 'matches', minScore: min });
+    const dayAgo = Date.now() - 864e5;
+    const cal = profile().calibration;
+    return { ...db.stats(min), matches: list.length, last: lastRefresh, priorWeights: PRIOR_WEIGHTS,
+      calibration: cal || { active: false, n: 0, pos: 0, neg: 0, weights: PRIOR_WEIGHTS },
+      toReview: db.listJobs({ scope: 'matches', minScore: min, unreviewed: true }).length,
+      newToday: list.filter((j) => new Date(`${j.found_at.replace(' ', 'T')}Z`) >= dayAgo).length,
+      strong: list.filter((j) => j.reasons.notes.includes('Strong CV fit')).length };
+  },
+  setJobStage: (_, id, stage) => db.setJobStage(str(id), str(stage)),
   setJobStatus: (_, id, status) => db.setJobStatus(str(id), str(status)),
   listAlerts: () => db.listAlerts(),
   unreadAlerts: () => db.unreadAlerts(),
@@ -154,6 +217,7 @@ app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.setAppUserModelId('JobPilot'); // Windows only shows toasts for apps with an id
 app.whenReady().then(() => {
   db = open(file('jobpilot.db'));
+  loadFxCache();
   rescoreAll(); // scoring rules may have changed since jobs were stored; ~1 s for 700 jobs
   for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, fn);
 

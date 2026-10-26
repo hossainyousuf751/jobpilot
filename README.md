@@ -13,7 +13,7 @@ npm start
 `python` must be on PATH (or set `JOBPILOT_PYTHON` to the interpreter). Without it the other sources still work.
 
 1. **Profile & CV** → Upload CV, check the extracted skills / years / roles / locations, Save.
-2. Optional: add a JSearch key (LinkedIn, Indeed, Glassdoor listings) and Adzuna keys. Without keys it uses JobSpy, Remotive, Arbeitnow and RemoteOK.
+2. Optional: add a JSearch key from OpenWebNinja (`ak_…`) or RapidAPI (LinkedIn, Indeed, Glassdoor listings; OpenWebNinja is searched every 2 hours to protect the quota) and Adzuna keys. A Reed key adds UK jobs with applicant counts (searched every 2 hours while the UK is in your locations). Without keys it uses JobSpy, Remotive, Arbeitnow and RemoteOK.
 3. **Portals** → sign in to LinkedIn once (session persists). Opening a LinkedIn job there saves its hiring team to **Recruiters**.
 
 The feed refreshes every 30 minutes while the app is open.

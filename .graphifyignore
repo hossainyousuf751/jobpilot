@@ -1,0 +1,4 @@
+# Personal data and generated output stay out of the knowledge graph.
+CV/
+graphify-out/
+*.db

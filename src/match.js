@@ -1,4 +1,5 @@
 // CV → profile extraction and job scoring. Pure functions, no Electron.
+const { parseSalary } = require('./insights');
 
 const SKILLS = [
   // languages & runtimes
@@ -96,8 +97,117 @@ function detectRoles(text) {
   return roles;
 }
 
+// Roles the CV's content qualifies you for, beyond past job titles. Evidence in the professional
+// sections counts double. ponytail: hand-written rules; extend the list for other professions.
+const ROLE_RULES = [
+  ['Financial Analyst', /financial (?:analysis|statements?|modell?ing|reporting|engineering)|valuation|\bcfa\b|fp&a/gi],
+  ['Internal Auditor', /\baudit\w*/gi],
+  ['Accountant', /accounting|bookkeeping|reconciliation|\btally\b|quickbooks|ledger|ifrs|gaap/gi],
+  ['Data Analyst', /data (?:analy\w*|cleaning|quality|processing|sets?)|datasets?|\bsql\b|power bi|tableau|python/gi],
+  ['Risk Analyst', /\brisk\b|derivatives|structured products?|\bcredit\b|barriers?|payoff/gi],
+  ['Compliance Analyst', /compliance|regulatory|\bkyc\b|\baml\b|sec filings?/gi],
+  ['Investment Analyst', /investments?\b|portfolio|capital markets?|equity research|asset management|indices/gi],
+  ['Research Analyst', /\bresearch\b|literature reviews?/gi],
+  ['Business Analyst', /business analysis|requirements gathering|process mapping|stakeholder/gi],
+  ['Project Coordinator', /project (?:plans?|management|documentation|coordination)|status reports/gi],
+  ['Product Manager', /product management|roadmap|product vision|\bmvp\b/gi],
+  ['Software Engineer', /software (?:engineer|develop)\w*|javascript|typescript|\bjava\b|react|node\.js/gi],
+];
+function suggestRoles(text) {
+  const prof = professionalText(text);
+  const count = (re, s) => (s.match(re) || []).length;
+  return ROLE_RULES.map(([role, re]) => [role, 2 * count(re, prof) + count(re, text)])
+    .filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([role]) => role);
+}
+
+// --- CV ↔ job text similarity (TF-IDF cosine), so the whole CV counts, not only listed skills.
+const STOP = new Set(('the and for with from that this are was were you your our will have has had not but all any can may per into their they '
+  + 'them its out over such than then there these those under upon very via who whom why how what when where which while also more most other some '
+  + 'each both able about above after again against being below between during further here just once only same should through until well within '
+  + 'would could including include includes using used use work working role job team teams company experience years year strong skills skill '
+  + 'ability required requirements responsibilities candidate candidates position apply must etc new good excellent knowledge understanding '
+  + 'support provide ensure related relevant across based assistant associate executive officer specialist coordinator '
+  + 'intern trainee manager consultant representative clerk member graduate').split(' '));
+// ponytail: suffix-strip + 8-char prefix as a stemmer; good enough for ranking, swap for a real stemmer if needed.
+const stemWord = (w) => w.replace(/(ings|ing|ers|er|ies|es|s|ed|ly|ions|ion|ments|ment)$/, '').slice(0, 8);
+const termsOf = (t) => (t.toLowerCase().match(/[a-z][a-z&]{2,}/g) || []).filter((w) => !STOP.has(w)).map(stemWord).filter((w) => w.length > 2);
+const termCounts = (t) => { const m = new Map(); for (const w of termsOf(t)) m.set(w, (m.get(w) || 0) + 1); return m; };
+
+// Experience and skills sections only: education, publications and references describe you, not the job you'd do.
+const SECTION_HEAD = /^\s*(profile|summary|about me|professional summary|professional experience|work experience|experience|employment(?: history)?|skills|key skills|core competencies|education|academic.*|projects?|courses|publications|conferences?|references|achievements.*|certifications?|certificates?|extended learning|languages|interests|awards|volunteer.*|training)\s*$/i;
+const KEEP_SECTION = /experience|employment|skills|competenc/i;
+function professionalText(text) {
+  let cur = null;
+  const keep = [];
+  for (const line of text.split(/\r?\n/)) {
+    const h = SECTION_HEAD.exec(line);
+    if (h) cur = h[1];
+    else if (cur && KEEP_SECTION.test(cur)) keep.push(line);
+  }
+  return keep.length > 5 ? keep.join('\n') : text;
+}
+
+// Document frequencies over the stored jobs, place/company words that would only match on geography,
+// and the market median pay per currency/period (for "pays above/below market").
+function buildCorpus(jobs) {
+  const df = new Map(), noise = new Set(), pay = new Map();
+  for (const j of jobs) {
+    for (const w of new Set(termsOf(`${j.title || ''} ${j.description || ''}`))) df.set(w, (df.get(w) || 0) + 1);
+    for (const w of termsOf(`${j.location || ''} ${j.company || ''}`)) noise.add(w);
+    const s = parseSalary(j.salary);
+    if (s?.currency && s.period) pay.set(`${s.currency}/${s.period}`, [...(pay.get(`${s.currency}/${s.period}`) || []), (s.lo + s.hi) / 2]);
+  }
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  return { n: jobs.length, df, noise, payMedian: new Map([...pay].filter(([, xs]) => xs.length >= 5).map(([k, xs]) => [k, median(xs)])) };
+}
+
+function cvSimilarity(cvTerms, job, corpus) {
+  const idf = (w) => Math.log((corpus.n + 1) / ((corpus.df.get(w) || 0) + 1));
+  const vec = (entries) => {
+    const v = new Map();
+    let n = 0;
+    for (const [w, c] of entries) { const x = (1 + Math.log(c)) * idf(w); v.set(w, x); n += x * x; }
+    return { v, n: Math.sqrt(n) };
+  };
+  const cv = vec(Object.entries(cvTerms).filter(([w]) => corpus.df.has(w) && !corpus.noise.has(w)));
+  const jv = vec(termCounts(`${job.title} ${job.title} ${job.description || ''}`)); // title counts double
+  let dot = 0;
+  for (const [w, x] of cv.v) if (jv.v.has(w)) dot += x * jv.v.get(w);
+  return cv.n && jv.n ? dot / (cv.n * jv.n) : 0;
+}
+
 function buildProfile(text) {
-  return { skills: findSkills(text), years: cvYears(text), roles: detectRoles(text) };
+  const titles = detectRoles(text);
+  const suggestedRoles = suggestRoles(text);
+  const roles = [...titles, ...suggestedRoles.filter((r) => !titles.some((t) => t.toLowerCase() === r.toLowerCase()))].slice(0, 5);
+  // Term counts, not the CV text itself: enough for matching, less personal data stored.
+  const cvTerms = Object.fromEntries([...termCounts(professionalText(text))].sort((a, b) => b[1] - a[1]).slice(0, 300));
+  // CVs start with the person's name: 2-4 capitalised words, letters only.
+  const first = text.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+  const name = /^(\p{Lu}[\p{L}'-]+)( \p{Lu}[\p{L}'-]+){1,3}$/u.test(first) && first !== first.toUpperCase() ? first : '';
+  return { name, skills: findSkills(text), years: cvYears(text), education: cvEducation(text), roles, suggestedRoles, cvTerms };
+}
+
+// Degree levels: 1 diploma/school, 2 bachelor, 3 master, 4 doctorate.
+const EDU = [[4, /\b(ph\.?d|doctorate|doctoral)\b/i], [3, /\b(master'?s|master of|msc|m\.sc|mba|postgraduate|post-graduate)\b/i],
+  [2, /\b(bachelor'?s?|bba|bsc|b\.sc|b\.com|bcom|undergraduate|university degree)\b/i], [1, /\b(diploma|hsc|a-?levels?|high school|secondary school)\b/i]];
+const EDU_NAME = { 1: 'a diploma', 2: "a bachelor's degree", 3: "a master's degree", 4: 'a doctorate' };
+// The Education section only (referees' "PhD Candidate" must not count), or the whole CV if it has no such heading.
+function educationText(text) {
+  let cur = null;
+  const keep = [];
+  for (const line of text.split(/\r?\n/)) {
+    const h = SECTION_HEAD.exec(line);
+    if (h) cur = h[1];
+    else if (cur && /^(education|academic)/i.test(cur)) keep.push(line);
+  }
+  return keep.length ? keep.join('\n') : text;
+}
+// ponytail: highest degree in the Education section, in-progress degrees included; the user corrects it in Profile.
+function cvEducation(text) {
+  const edu = educationText(text);
+  const levels = EDU.filter(([, re]) => re.test(edu)).map(([l]) => l);
+  return levels.length ? Math.max(...levels) : null;
 }
 
 // Minimum years a posting asks for, e.g. "3-5 years of experience" → 3.
@@ -147,7 +257,44 @@ function checkLocation(p, job, blockers) {
   return false;
 }
 
-function scoreJob(p, job) {
+// Seniority/function words say little about the field: "Research Assistant" ≠ "Assistant Engineer".
+const GENERIC_TITLE = new Set(['assistant', 'associate', 'executive', 'officer', 'specialist', 'coordinator', 'intern', 'trainee',
+  'manager', 'consultant', 'representative', 'clerk', 'member', 'team', 'graduate']);
+
+// ---- Scoring v2: nine explainable metrics (0-1 each, null = no evidence), combined with weights.
+const METRICS = ['skills', 'title', 'experience', 'cv', 'edge', 'seniority', 'education', 'pay', 'freshness'];
+// Priors until calibration has enough decisions. Freshness is low: nearly every fetched job is under a week old.
+const PRIOR_WEIGHTS = { skills: 25, title: 20, experience: 12, cv: 13, edge: 9, seniority: 10, education: 4, pay: 5, freshness: 2 };
+
+// Weighted mean over the metrics that have evidence; missing evidence neither helps nor hurts.
+function combine(parts, weights = PRIOR_WEIGHTS) {
+  let sum = 0, wsum = 0;
+  for (const k of METRICS) if (parts[k] != null) { sum += weights[k] * parts[k]; wsum += weights[k]; }
+  return wsum ? sum / wsum : 0;
+}
+
+// "Nice to have" sentences: skills only mentioned there count half.
+const PREFERRED = /prefer|nice[ -]to[ -]have|\bplus\b|advantage|desirable|bonus|ideally/i;
+const sentences = (text) => text.split(/\n|(?<=[.;!?])\s+/);
+
+// Title level: 0 intern … 2 mid (no level word) … 5 head/director; your level from years.
+function titleLevel(t) {
+  if (/\b(head|director|vp|vice president|chief)\b/.test(t)) return 5;
+  if (/\b(assistant|deputy) manager\b/.test(t)) return 3;
+  if (/\b(manager|lead|principal)\b/.test(t)) return 4;
+  if (/\b(senior|sr)\b/.test(t)) return 3;
+  if (/\b(intern|internship|trainee)\b/.test(t)) return 0;
+  if (/\b(junior|jr|graduate|entry|assistant)\b/.test(t)) return 1;
+  return 2;
+}
+const yourLevel = (years) => (years < 1 ? 0 : years < 2 ? 1 : years < 5 ? 2 : years < 8 ? 3 : years < 12 ? 4 : 5);
+
+const PER_MONTH = { month: 1, year: 1 / 12, week: 4.33, day: 22, hour: 176 };
+const DAY = 864e5;
+const parseTime = (s) => (!s ? NaN : /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(`${s}T00:00:00Z`) : /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? Date.parse(s) : Date.parse(`${s.replace(' ', 'T')}Z`));
+
+// corpus (from buildCorpus) is optional: without it, CV similarity, skill edge and market pay are no evidence.
+function scoreJob(p, job, corpus, now = Date.now(), weights = p.calibration?.active ? p.calibration.weights : PRIOR_WEIGHTS) {
   const title = job.title || '';
   const desc = job.description || '';
   const text = `${title}\n${desc}`;
@@ -158,13 +305,18 @@ function scoreJob(p, job) {
   const jobSkills = findSkills(text, [...SKILLS, ...extra]);
   const have = new Set(p.skills.map((s) => s.toLowerCase()));
   const matched = jobSkills.filter((s) => have.has(s.toLowerCase()));
-  const missing = jobSkills.filter((s) => !have.has(s.toLowerCase()));
-  // At least 3 in the denominator: one generic shared skill shouldn't mean full coverage.
-  const coverage = jobSkills.length ? matched.length / Math.max(3, jobSkills.length) : 0.3;
+  const required = sentences(text).filter((s) => !PREFERRED.test(s)).join('\n');
+  const weightOf = (s) => (skillRe(s).test(required) ? 1 : 0.5);
+  // Required skills you lack first: those are the gaps that matter.
+  const missing = jobSkills.filter((s) => !have.has(s.toLowerCase())).sort((a, b) => weightOf(b) - weightOf(a));
+  // Pad to 3 skills in the denominator: one generic shared skill shouldn't mean full coverage.
+  const total = jobSkills.reduce((a, s) => a + weightOf(s), 0) + Math.max(0, 3 - jobSkills.length);
+  const coverage = jobSkills.length ? matched.reduce((a, s) => a + weightOf(s), 0) / total : 0.3;
 
   const tw = words(title);
   const titleHit = Math.max(0, ...p.roles.map((r) => {
-    const rw = words(r);
+    const all = words(r), core = all.filter((w) => !GENERIC_TITLE.has(w));
+    const rw = core.length ? core : all;
     return rw.length ? rw.filter((w) => tw.some((t) => sameStem(w, t))).length / rw.length : 0;
   }));
   // Nothing in the title relates to your roles: generic skill words alone shouldn't make it a match.
@@ -172,20 +324,139 @@ function scoreJob(p, job) {
 
   const need = jobYears(desc);
   if (need != null && need > p.years + 1) blockers.push(`Needs ${need}+ yrs (you have ${p.years})`);
+  // Graded: one year short is 0.6, not a cliff; no stated requirement is no evidence.
+  const experience = need == null ? null : need <= p.years ? 1 : Math.max(0, 1 - 0.4 * (need - p.years));
 
   const t = title.toLowerCase();
   if (/\b(director|vp|vice president|head of|chief)\b/.test(t) && p.years < 8) blockers.push('Executive-level role');
-  else if (/\b(senior|sr\.?|lead|principal|staff)\b/.test(t) && p.years < 4) { penalty += 15; notes.push('Senior title'); }
-  if (/\b(intern|internship|graduate|junior|jr\.?|entry)\b/.test(t) && p.years > 5) { penalty += 10; notes.push('Junior role'); }
+  const gap = titleLevel(t) - yourLevel(p.years);
+  const seniority = Math.max(0, 1 - 0.35 * Math.abs(gap));
+  if (gap >= 2) notes.push('Stretch role');
+  else if (gap <= -2) notes.push('Below your level');
+
+  // Education: the lowest degree a non-optional sentence asks for, against yours.
+  const asked = EDU.filter(([, re]) => re.test(required)).map(([l]) => l);
+  const needEdu = asked.length ? Math.min(...asked) : null;
+  const education = needEdu == null || p.education == null ? null : p.education >= needEdu ? 1 : p.education === needEdu - 1 ? 0.4 : 0;
+  if (education != null && education < 1) notes.push(`Asks for ${EDU_NAME[needEdu]}`);
+
+  // Pay against your expectation (same currency only: no FX), and against the market median.
+  const sal = parseSalary(job.salary);
+  const exp = p.expectedSalary;
+  // Other currencies are converted at daily rates (corpus.fx). ponytail: nominal rates, no cost-of-living adjustment.
+  const rate = (c) => corpus?.fx?.rates?.[String(c).toLowerCase()];
+  const toExp = sal && exp?.amount > 0 && (sal.currency === exp.currency ? 1 : rate(sal.currency) && rate(exp.currency) ? rate(exp.currency) / rate(sal.currency) : null);
+  const pay = toExp && PER_MONTH[sal.period] && PER_MONTH[exp.period]
+    ? Math.min(1, (sal.hi * PER_MONTH[sal.period] * toExp) / (exp.amount * PER_MONTH[exp.period])) : null;
+  if (pay != null && sal.currency !== exp.currency) {
+    notes.push(`≈ ${exp.currency} ${Math.round(sal.hi * PER_MONTH[sal.period] * toExp / PER_MONTH[exp.period]).toLocaleString('en-US')}/${exp.period}`);
+  }
+  const median = sal && corpus?.payMedian?.get(`${sal.currency}/${sal.period}`);
+  if (median) {
+    const diff = Math.round((100 * ((sal.lo + sal.hi) / 2 - median)) / median);
+    if (diff >= 15) notes.push(`Pays ${diff}% above market`);
+    else if (diff <= -15) notes.push(`Pays ${-diff}% below market`);
+  }
+
+  // Competition, where the source tells us (Reed): few applicants is an opening, many is a crowd.
+  if (Number.isInteger(job.applicants)) {
+    if (job.applicants === 0) notes.push('No applicants yet');
+    else if (job.applicants <= 10) notes.push(`Few applicants (${job.applicants})`);
+    else if (job.applicants >= 50) notes.push(`${job.applicants} applicants already`);
+  }
+
+  // Freshness: early applicants get read. 1 for 2 days, falling to 0.3 at 30 days.
+  const age = (now - parseTime(job.posted_at)) / DAY;
+  const freshness = Number.isNaN(age) ? null : age <= 2 ? 1 : Math.max(0.3, 1 - (0.7 * (age - 2)) / 28);
+  if (age < 1) notes.push('Posted today: apply early');
+
+  // Skill edge: rarity-weighted coverage. Matching a skill few jobs ask for is a stronger signal than a common one.
+  let edge = null;
+  if (corpus?.n && jobSkills.length) {
+    const share = (s) => Math.min(...termsOf(s).map((w) => (corpus.df.get(w) || 0) / corpus.n).concat(1));
+    // Smoothed IDF: a skill every job lists still weighs 1, so lacking it still costs something.
+    const idf = (s) => 1 + Math.log(1 / Math.max(share(s), 1 / (corpus.n + 1)));
+    const all = jobSkills.reduce((a, s) => a + weightOf(s) * idf(s), 0);
+    edge = all ? matched.reduce((a, s) => a + weightOf(s) * idf(s), 0) / all : null;
+    const rare = matched.filter((s) => share(s) < 0.05).sort((a, b) => share(a) - share(b))[0];
+    if (rare) notes.push(`Rare skill match: ${rare}`);
+  }
+
+  // "Account executive/manager" sell; they share a word with accounting but not the work.
+  if (/\baccount (executive|manager|director)\b|\bsales\b|business development/.test(t)
+    && !p.skills.some((s) => /sales|business development|account management/i.test(s))) { penalty += 20; notes.push('Sales role'); }
 
   const relocating = checkLocation(p, job, blockers);
   if (relocating) notes.push('Relocation');
   // Working abroad means a visa, so sponsorship wording blocks relocation jobs too.
   if ((p.needsSponsorship || relocating) && SPONSOR_RE.test(text)) blockers.push('No sponsorship / citizenship or clearance required');
 
-  const yearsFit = need == null || need <= p.years ? 1 : 0.5;
-  const score = Math.max(0, Math.min(100, Math.round(55 * coverage + 30 * titleHit + 15 * yearsFit) - penalty));
-  return { score, eligible: blockers.length === 0, reasons: { matched, missing: missing.slice(0, 6), notes, blockers } };
+  let cv = null;
+  if (corpus && p.cvTerms && Object.keys(p.cvTerms).length) {
+    // ponytail: 0.12 cosine ≈ top decile on real data (CV vs ~700 jobs); recalibrate if the corpus changes a lot.
+    cv = Math.min(1, cvSimilarity(p.cvTerms, job, corpus) / 0.12);
+    if (cv >= 0.8) notes.push('Strong CV fit');
+    else if (cv < 0.25) notes.push('Weak CV fit');
+  }
+  // Per-metric fit (0-100) so the UI can show why a job scored what it did, and calibration can learn from it.
+  const pct = (x) => (x == null ? null : Math.round(x * 100));
+  const parts = { skills: pct(coverage), title: pct(titleHit), experience: pct(experience), cv: pct(cv), edge: pct(edge),
+    seniority: pct(seniority), education: pct(education), pay: pct(pay), freshness: pct(freshness) };
+  const score = Math.max(0, Math.min(100, Math.round(combine(parts, weights)) - penalty));
+  return { score, eligible: blockers.length === 0, reasons: { matched, missing: missing.slice(0, 6), notes, blockers, parts } };
 }
 
-module.exports = { SKILLS, findSkills, cvYears, detectRoles, buildProfile, jobYears, scoreJob };
+// ---- Calibration: learn metric weights from the user's own decisions, and measure the agreement honestly.
+// AUC = chance that a random kept job outscores a random dropped one (0.5 = coin flip, 1 = perfect).
+function auc(rows) {
+  const pos = rows.filter((r) => r.label === 1), neg = rows.filter((r) => r.label === 0);
+  if (!pos.length || !neg.length) return null;
+  let win = 0;
+  for (const a of pos) for (const b of neg) win += a.s > b.s ? 1 : a.s === b.s ? 0.5 : 0;
+  return Math.round((1000 * win) / (pos.length * neg.length)) / 1000;
+}
+
+// Logistic regression on the metric vector (missing metrics imputed with their mean); returns non-negative weights summing to 100.
+function fitWeights(samples, prior) {
+  const means = Object.fromEntries(METRICS.map((k) => {
+    const xs = samples.map((s) => s.parts[k]).filter((x) => x != null);
+    return [k, xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length / 100 : 0.5];
+  }));
+  const X = samples.map((s) => METRICS.map((k) => (s.parts[k] == null ? means[k] : s.parts[k] / 100)));
+  const y = samples.map((s) => s.label);
+  const w = METRICS.map(() => 0);
+  let b = 0;
+  for (let it = 0; it < 800; it++) {
+    const gw = METRICS.map(() => 0);
+    let gb = 0;
+    X.forEach((x, i) => {
+      const z = b + x.reduce((a, v, j) => a + v * w[j], 0);
+      const err = 1 / (1 + Math.exp(-z)) - y[i];
+      x.forEach((v, j) => { gw[j] += err * v; });
+      gb += err;
+    });
+    w.forEach((_, j) => { w[j] -= 2 * (gw[j] / X.length + 0.001 * w[j]); });
+    b -= 2 * (gb / X.length);
+  }
+  const pos = w.map((v) => Math.max(0, v));
+  const sum = pos.reduce((a, v) => a + v, 0);
+  if (!sum) return { ...prior };
+  // Blend with the priors by how much data there is: never more than 70% learned.
+  const alpha = Math.min(0.7, samples.length / 100);
+  return Object.fromEntries(METRICS.map((k, j) => [k, Math.round(((1 - alpha) * prior[k] + (alpha * 100 * pos[j]) / sum) * 10) / 10]));
+}
+
+// samples: [{ id, parts, label: 1 kept (saved/applied) | 0 dropped (passed/hidden) }]
+function calibrate(samples, prior = PRIOR_WEIGHTS) {
+  const pos = samples.filter((s) => s.label === 1).length, neg = samples.length - pos;
+  const base = { active: false, n: samples.length, pos, neg, weights: { ...prior } };
+  if (samples.length < 20 || pos < 5 || neg < 5) return base;
+  // Held-out check: learn on half the decisions, measure on the other half, so the reported agreement isn't self-graded.
+  const sorted = [...samples].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const train = sorted.filter((_, i) => i % 2 === 0), test = sorted.filter((_, i) => i % 2 === 1);
+  const heldOut = fitWeights(train, prior);
+  const rows = (w) => test.map((s) => ({ s: combine(s.parts, w), label: s.label }));
+  return { ...base, active: true, weights: fitWeights(samples, prior), aucPrior: auc(rows(prior)), aucLearned: auc(rows(heldOut)) };
+}
+
+module.exports = { SKILLS, METRICS, PRIOR_WEIGHTS, findSkills, cvYears, detectRoles, suggestRoles, buildProfile, buildCorpus, jobYears, scoreJob, combine, calibrate, auc };

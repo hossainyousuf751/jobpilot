@@ -37,14 +37,17 @@ function open(file) {
   `);
 
   // Added after v1: idempotent column additions.
-  try { db.exec('ALTER TABLE jobs ADD COLUMN company_url TEXT'); } catch { /* already there */ }
+  for (const col of ['company_url TEXT', 'job_type TEXT', 'salary TEXT',
+    "stage TEXT CHECK (stage IN ('applied', 'interview', 'offer', 'rejected'))", 'stage_at TEXT', 'reviewed INTEGER NOT NULL DEFAULT 0', 'applicants INTEGER']) {
+    try { db.exec(`ALTER TABLE jobs ADD COLUMN ${col}`); } catch { /* already there */ }
+  }
 
   const q = (sql) => db.prepare(sql);
-  const insJob = q(`INSERT OR IGNORE INTO jobs (id, source, title, company, location, remote, url, description, posted_at, score, eligible, reasons, company_url)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const insJob = q(`INSERT OR IGNORE INTO jobs (id, source, title, company, location, remote, url, description, posted_at, score, eligible, reasons, company_url, job_type, salary, applicants)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const rescore = q('UPDATE jobs SET score = ?, eligible = ?, reasons = ? WHERE id = ?');
   // A refetch may bring what the first fetch missed (e.g. LinkedIn description request was rate-limited).
-  const fillIn = q(`UPDATE jobs SET company_url = COALESCE(?, company_url),
+  const fillIn = q(`UPDATE jobs SET company_url = COALESCE(?, company_url), job_type = COALESCE(?, job_type), salary = COALESCE(?, salary), applicants = COALESCE(?, applicants),
                     description = CASE WHEN length(?) > length(description) THEN ? ELSE description END WHERE id = ?`);
   const insRec = q(`INSERT OR IGNORE INTO recruiters (name, title, company, profile_url, email, job_id, source) VALUES (?, ?, ?, ?, ?, ?, ?)`);
   const parse = (j) => ({ ...j, reasons: JSON.parse(j.reasons) });
@@ -58,17 +61,54 @@ function open(file) {
     upsertJob(j, m) {
       const reasons = JSON.stringify(m.reasons);
       const r = insJob.run(j.id, j.source, j.title, j.company || '', j.location || '', j.remote ? 1 : 0, j.url,
-        j.description || '', j.posted_at || '', m.score, m.eligible ? 1 : 0, reasons, j.company_url || null);
-      if (!r.changes) { rescore.run(m.score, m.eligible ? 1 : 0, reasons, j.id); fillIn.run(j.company_url || null, j.description || '', j.description || '', j.id); }
+        j.description || '', j.posted_at || '', m.score, m.eligible ? 1 : 0, reasons, j.company_url || null, j.job_type || null, j.salary || null, j.applicants ?? null);
+      if (!r.changes) { rescore.run(m.score, m.eligible ? 1 : 0, reasons, j.id); fillIn.run(j.company_url || null, j.job_type || null, j.salary || null, j.applicants ?? null, j.description || '', j.description || '', j.id); }
       return r.changes > 0;
     },
     allJobs: () => q('SELECT * FROM jobs').all(),
     rescore: (id, m) => rescore.run(m.score, m.eligible ? 1 : 0, JSON.stringify(m.reasons), id),
-    listJobs: ({ minScore = 0, showIneligible = false } = {}) =>
-      q(`SELECT id, source, title, company, location, remote, url, posted_at, score, eligible, reasons, status, found_at
-         FROM jobs WHERE status != 'hidden' AND (eligible = 1 OR ?) AND score >= ?
-         ORDER BY found_at DESC, score DESC LIMIT 500`).all(showIneligible ? 1 : 0, minScore).map(parse).reduce(dedupe, []),
-    setJobStatus: (id, status) => q('UPDATE jobs SET status = ? WHERE id = ?').run(status, id),
+    // scope 'matches' (default): eligible and score ≥ minScore; 'all': every job not hidden. Filters are already validated in main.js.
+    listJobs(f = {}) {
+      const where = ["status != 'hidden'"], args = [];
+      // ISO "2026-10-25T03:55" → "2026-10-25 03:55" so it compares correctly with SQLite datetimes; date-only = midnight.
+      const posted = "replace(COALESCE(NULLIF(posted_at, ''), found_at), 'T', ' ')";
+      if (f.scope !== 'all') { where.push('eligible = 1 AND score >= ?'); args.push(f.minScore || 0); }
+      if (f.q) { where.push("(title || ' ' || COALESCE(company, '') || ' ' || COALESCE(description, '')) LIKE ?"); args.push(`%${f.q}%`); }
+      if (f.location) { where.push('location LIKE ?'); args.push(`%${f.location}%`); }
+      if (f.days) { where.push(`${posted} >= datetime('now', ?)`); args.push(`-${f.days} days`); }
+      if (f.workplace) where.push(f.workplace === 'remote' ? 'remote = 1' : 'remote = 0');
+      if (f.jobType) { where.push('job_type LIKE ?'); args.push(`%${f.jobType}%`); }
+      if (f.salaryOnly) where.push('salary IS NOT NULL');
+      if (f.unreviewed) where.push("status = 'new' AND reviewed = 0");
+      const order = f.sort === 'newest' ? `${posted} DESC, score DESC` : `score DESC, ${posted} DESC`;
+      return q(`SELECT id, source, title, company, location, remote, url, posted_at, score, eligible, reasons, status, stage, found_at, job_type, salary
+                FROM jobs WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT 500`).all(...args).map(parse).reduce(dedupe, []);
+    },
+    // Dashboard numbers; "new today" = found in the last 24 h among matches.
+    stats: (minScore) => Object.fromEntries(Object.entries(q(`SELECT
+        SUM(eligible = 1 AND score >= ? AND status != 'hidden') matches,
+        SUM(eligible = 1 AND score >= ? AND status != 'hidden' AND found_at >= datetime('now', '-1 day')) newToday,
+        SUM(eligible = 1 AND score >= ? AND status != 'hidden' AND reasons LIKE '%Strong CV fit%') strong,
+        SUM(status != 'hidden') total, SUM(status = 'saved') saved,
+        SUM(status = 'applied' AND COALESCE(stage, 'applied') = 'applied') applied,
+        SUM(stage = 'interview') interview, SUM(stage = 'offer') offer
+      FROM jobs`).get(minScore, minScore, minScore)).map(([k, v]) => [k, v || 0])),
+    getJob: (id) => { const j = q('SELECT * FROM jobs WHERE id = ?').get(id); return j && parse(j); },
+    myJobs: () => q(`SELECT id, source, title, company, location, remote, url, posted_at, score, eligible, reasons, status, stage, stage_at, found_at, job_type, salary
+                     FROM jobs WHERE status IN ('saved', 'applied') ORDER BY found_at DESC`).all().map(parse),
+    // A stage only exists while applied; any other status clears it.
+    // Any decision on a job counts as reviewed; saving/applying stamps stage_at for follow-up reminders.
+    setJobStatus: (id, status) => q(`UPDATE jobs SET status = ?, reviewed = 1,
+      stage = CASE WHEN ? = 'applied' THEN COALESCE(stage, 'applied') END,
+      stage_at = CASE WHEN ? IN ('saved', 'applied') AND status != ? THEN datetime('now') ELSE stage_at END WHERE id = ?`).run(status, status, status, status, id),
+    setJobStage: (id, stage) => q(`UPDATE jobs SET status = 'applied', stage = ?, reviewed = 1, stage_at = datetime('now') WHERE id = ?`).run(stage, id),
+    // Training labels for calibration: kept (saved/applied) = 1, dropped (passed in review or hidden) = 0.
+    decisions: () => q(`SELECT id, status, reasons FROM jobs WHERE status IN ('saved', 'applied', 'hidden') OR (status = 'new' AND reviewed = 1)`).all()
+      .map((r) => ({ id: r.id, parts: JSON.parse(r.reasons).parts || {}, label: r.status === 'saved' || r.status === 'applied' ? 1 : 0 }))
+      .filter((r) => Object.keys(r.parts).length),
+    markReviewed: (id) => q('UPDATE jobs SET reviewed = 1 WHERE id = ?').run(id),
+    // Undo of a review-deck decision: the deck only shows status 'new' jobs, so 'new' is the state to restore.
+    undoReview: (id) => q("UPDATE jobs SET reviewed = 0, status = 'new', stage = NULL WHERE id = ?").run(id),
     prune: () => {
       q(`DELETE FROM jobs WHERE status IN ('new', 'hidden') AND found_at < datetime('now', '-30 days')`).run();
       // Contacts you never acted on are personal data with no use after 90 days.
