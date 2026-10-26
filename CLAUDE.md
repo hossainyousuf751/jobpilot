@@ -123,6 +123,11 @@ There is a knowledge graph of the code and docs in `graphify-out/`: 258 nodes, 1
   - CVs and letters are JSON in the `documents` table. `cvdoc.js` holds the CV model and the offline importer (`parseCvText`, role-first entries); `src/ui/cv.js` the builder (4 templates, design panel, drag-to-reorder sections, sidebar column); `src/ui/letter.js` the studio (5 blocks × 3 tones drafted from the CV and the chosen job, a coach for length, You/I balance and keywords).
   - `doc.css` is shared by preview and PDF. `exportPdf` prints in one reused hidden window (JavaScript off, strict CSP): a new window per export made the second export fail with ERR_FAILED.
   - The user's CV was imported as a document (Classic; skills added from the profile). A sample letter exists for Aftab Bahumukhi Farms.
+- **Web version (2026-10-27), free stack, no card:** Supabase (auth, Postgres with RLS, `fetch-jobs` Edge Function) plus Cloudflare Pages (static UI). The plan and status are in `SPEC.md` → Going online.
+  - `node scripts/build-web.mjs` builds `web-dist/` and regenerates `supabase/functions/fetch-jobs/index.ts`. Commit the regenerated function after any change to `sources.js`, `match.js` or `insights.js`.
+  - Pushing to `main` deploys `supabase/` through the Supabase GitHub integration (working directory `.`).
+  - Only the publishable key lives in the repo (`src/web/config.js`). The secret key never goes in a file or a chat.
+  - Online is APIs-only: no JobSpy, Portals, hiring-team capture or Hunter.
 - **Next:** the user tests Hunter with a real key. Slice 6 (employer ATS boards) only if the user asks.
 - **Not yet confirmed by a human:**
   - LinkedIn login persisting across restarts;
