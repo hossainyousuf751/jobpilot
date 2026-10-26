@@ -484,6 +484,91 @@ test('source files contain no stray control characters', () => {
     assert.equal(bad.length, 0, `${f} has control characters`);
   }
   assert.equal(require('../src/sources').jobType('Temp'), 'temporary');
+  // Renderer scripts are never required by tests; compile them so a syntax error fails here, not in the app.
+  const vm = require('vm');
+  for (const f of files.filter((f) => f.endsWith('.js'))) assert.doesNotThrow(() => new vm.Script(`(function (exports, require, module, __filename, __dirname) {
+${fs.readFileSync(path.join(root, f), 'utf8')}
+})`, { filename: f }), `${f} does not parse`);
+});
+
+// Shaped like a FlowCV PDF's extracted text: columns interleave, so dates and locations land between bullets.
+const FLOW_CV = `Jane Rahman
+Data Analyst at Acme Docs
+jane@example.com
+(+880) 1886000000
+30, Some Street Wari
+27th February 2003
+LinkedIn
+Profile
+I enjoy turning data into decisions.
+As a CFA aspirant, I keep learning.
+Professional Experience
+Acme Docs
+Data Analyst
+•Analyze SEC structured product
+filings to ensure accuracy.
+10/2025 – Present
+Dhaka, Bangladesh
+•Clean datasets.
+Grant Thornton Bangladesh (Audit Firm)
+Audit Assistant
+My core responsibilities include preparing audit proposals, analyzing
+financial statements.
+01/2025 – 09/2025
+Dhaka, Bangladesh
+Independent University, Bangladesh
+Research Assistant
+•Perform literature reviews.
+05/2022 – 12/2024
+Dhaka, Bangladesh
+Education
+World Quant University
+MSc in Financial Engineering
+Running Score: 96%
+01/2026 – Present
+Washington D.C, USA
+Certificate
+Courses
+Business Research Methodology
+Cambridge University Edx Online
+2024
+Exercising Leadership
+Harvard Business School Online
+2022
+Skills
+Audit, Accounting, SQL`;
+
+test('CV importer: personal details, sections, entries from FlowCV-style text', () => {
+  const { parseCvText } = require('../src/cvdoc');
+  const cv = parseCvText(FLOW_CV);
+  assert.deepEqual([cv.personal.name, cv.personal.title, cv.personal.email, cv.personal.phone, cv.personal.location],
+    ['Jane Rahman', 'Data Analyst at Acme Docs', 'jane@example.com', '(+880) 1886000000', '30, Some Street Wari']);
+  assert.ok(!JSON.stringify(cv).includes('February 2003'), 'date of birth is not imported');
+  assert.deepEqual(cv.sections.map((s) => s.type), ['profile', 'experience', 'education', 'courses', 'skills']);
+  assert.equal(cv.sections[0].text, 'I enjoy turning data into decisions.\nAs a CFA aspirant, I keep learning.');
+  const [a, b, c] = cv.sections[1].items;
+  assert.deepEqual([a.title, a.subtitle, a.start, a.end, a.location], ['Data Analyst', 'Acme Docs', '10/2025', 'Present', 'Dhaka, Bangladesh'], 'role first, employer second');
+  assert.equal(a.description, '• Analyze SEC structured product filings to ensure accuracy.\n• Clean datasets.');
+  assert.deepEqual([b.title, b.subtitle, b.start, b.end], ['Audit Assistant', 'Grant Thornton Bangladesh (Audit Firm)', '01/2025', '09/2025']);
+  assert.equal(b.description, 'My core responsibilities include preparing audit proposals, analyzing financial statements.');
+  assert.deepEqual([c.title, c.subtitle, c.location], ['Research Assistant', 'Independent University, Bangladesh', 'Dhaka, Bangladesh'], 'an employer with a comma is not a location');
+  const edu = cv.sections[2].items[0];
+  assert.deepEqual([edu.title, edu.subtitle, edu.description, edu.location], ['MSc in Financial Engineering', 'World Quant University', 'Running Score: 96%', 'Washington D.C, USA']);
+  assert.deepEqual(cv.sections[3].items.map((e) => [e.title, e.subtitle, e.start]), [['Business Research Methodology', 'Cambridge University Edx Online', '2024'], ['Exercising Leadership', 'Harvard Business School Online', '2022']]);
+  assert.deepEqual(cv.sections[4].items.map((t) => t.name), ['Audit', 'Accounting', 'SQL']);
+});
+
+test('documents: create, list by kind, update, delete', () => {
+  const db = require('../src/db').open(':memory:');
+  db.saveDoc({ id: 'cv1', kind: 'cv', name: 'Audit CV', data: { personal: { name: 'Jane' } } });
+  db.saveDoc({ id: 'l1', kind: 'letter', name: 'Letter to Acme', data: { blocks: [] } });
+  assert.deepEqual(db.listDocs('cv').map((d) => d.name), ['Audit CV']);
+  db.saveDoc({ id: 'cv1', kind: 'cv', name: 'Audit CV v2', data: { personal: { name: 'Jane R' } } });
+  assert.equal(db.getDoc('cv1').data.personal.name, 'Jane R');
+  assert.equal(db.listDocs('cv').length, 1);
+  db.deleteDoc('cv1');
+  assert.equal(db.getDoc('cv1'), undefined);
+  assert.throws(() => db.saveDoc({ id: 'x', kind: 'resume', name: 'n', data: {} }), /CHECK/);
 });
 
 test('contacts from description', () => {

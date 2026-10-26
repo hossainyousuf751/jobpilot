@@ -28,6 +28,9 @@ function open(file) {
     CREATE TABLE IF NOT EXISTS alerts (
       id INTEGER PRIMARY KEY, job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), read INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('cv', 'letter')), name TEXT NOT NULL, data TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')));
     CREATE TABLE IF NOT EXISTS recruiters (
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, title TEXT, company TEXT,
       profile_url TEXT UNIQUE, email TEXT UNIQUE, job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
@@ -106,6 +109,12 @@ function open(file) {
     decisions: () => q(`SELECT id, status, reasons FROM jobs WHERE status IN ('saved', 'applied', 'hidden') OR (status = 'new' AND reviewed = 1)`).all()
       .map((r) => ({ id: r.id, parts: JSON.parse(r.reasons).parts || {}, label: r.status === 'saved' || r.status === 'applied' ? 1 : 0 }))
       .filter((r) => Object.keys(r.parts).length),
+    // CV and cover-letter documents (builder data as JSON).
+    listDocs: (kind) => q('SELECT id, name, updated_at FROM documents WHERE kind = ? ORDER BY updated_at DESC, name').all(kind),
+    getDoc: (id) => { const r = q('SELECT * FROM documents WHERE id = ?').get(id); return r && { ...r, data: JSON.parse(r.data) }; },
+    saveDoc: ({ id, kind, name, data }) => q(`INSERT INTO documents (id, kind, name, data) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, data = excluded.data, updated_at = datetime('now')`).run(id, kind, name, JSON.stringify(data)),
+    deleteDoc: (id) => q('DELETE FROM documents WHERE id = ?').run(id),
     markReviewed: (id) => q('UPDATE jobs SET reviewed = 1 WHERE id = ?').run(id),
     // Undo of a review-deck decision: the deck only shows status 'new' jobs, so 'new' is the state to restore.
     undoReview: (id) => q("UPDATE jobs SET reviewed = 0, status = 'new', stage = NULL WHERE id = ?").run(id),

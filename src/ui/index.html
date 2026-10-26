@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
   <title>JobPilot</title>
+  <link rel="stylesheet" href="doc.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -64,6 +65,9 @@
       <button data-tab="alerts"><svg class="i"><use href="#i-bell" /></svg><span>Alerts</span><span id="alertCount" class="count badge" hidden></span></button>
       <button data-tab="recruiters"><svg class="i"><use href="#i-users" /></svg><span>Recruiters</span></button>
       <button data-tab="insights"><svg class="i"><use href="#i-chart" /></svg><span>Insights</span></button>
+      <div class="nav-group">Documents</div>
+      <button data-tab="cvbuilder"><svg class="i"><use href="#i-file" /></svg><span>CV builder</span></button>
+      <button data-tab="letters"><svg class="i"><use href="#i-mail" /></svg><span>Cover letters</span></button>
       <div class="nav-group">Tools</div>
       <button data-tab="browser"><svg class="i"><use href="#i-globe" /></svg><span>Portals</span></button>
       <button data-tab="profile"><svg class="i"><use href="#i-user" /></svg><span>Profile &amp; CV</span></button>
@@ -181,6 +185,47 @@
       <ul id="companies" class="company-grid"></ul>
     </section>
 
+    <section id="cvbuilder" class="studio" hidden>
+      <header class="studio-bar">
+        <h1>CV builder</h1>
+        <select id="cvPick" class="select" aria-label="Your CVs"></select>
+        <input id="cvName" class="name-input" aria-label="CV name" placeholder="CV name">
+        <button id="cvNew" class="btn"><svg class="i"><use href="#i-plus" /></svg><span>New</span></button>
+        <button id="cvImport" class="btn"><svg class="i"><use href="#i-upload" /></svg><span>Import my CV</span></button>
+        <button id="cvDup" class="btn"><svg class="i"><use href="#i-layers" /></svg><span>Duplicate</span></button>
+        <button id="cvDelete" class="icon-btn danger" aria-label="Delete this CV" title="Delete this CV"><svg class="i"><use href="#i-x" /></svg></button>
+        <span id="cvSaved" class="saved" aria-live="polite"></span>
+        <button id="cvPdf" class="btn btn-primary"><svg class="i"><use href="#i-file" /></svg><span>Download PDF</span></button>
+      </header>
+      <div class="studio-split">
+        <div class="studio-editor">
+          <div class="seg-tabs" role="tablist"><button class="seg-tab on" data-cvtab="content" role="tab">Content</button><button class="seg-tab" data-cvtab="design" role="tab">Customize</button></div>
+          <div id="cvEditor" class="ed-stack"></div>
+        </div>
+        <div id="cvStage" class="studio-stage" aria-label="CV preview"><div id="cvPage" class="page-wrap"></div></div>
+      </div>
+    </section>
+
+    <section id="letters" class="studio" hidden>
+      <header class="studio-bar">
+        <h1>Cover letters</h1>
+        <select id="letterPick" class="select" aria-label="Your letters"></select>
+        <input id="letterName" class="name-input" aria-label="Letter name" placeholder="Letter name">
+        <button id="letterNew" class="btn"><svg class="i"><use href="#i-plus" /></svg><span>New letter</span></button>
+        <button id="letterDelete" class="icon-btn danger" aria-label="Delete this letter" title="Delete this letter"><svg class="i"><use href="#i-x" /></svg></button>
+        <span id="letterSaved" class="saved" aria-live="polite"></span>
+        <button id="letterCopy" class="btn"><svg class="i"><use href="#i-layers" /></svg><span>Copy text</span></button>
+        <button id="letterPdf" class="btn btn-primary"><svg class="i"><use href="#i-file" /></svg><span>Download PDF</span></button>
+      </header>
+      <div class="studio-split">
+        <div class="studio-editor"><div id="letterEditor" class="ed-stack"></div></div>
+        <div class="studio-stage-col">
+          <div id="coach" class="coach" aria-live="polite"></div>
+          <div id="letterStage" class="studio-stage" aria-label="Letter preview"><div id="letterPage" class="page-wrap"></div></div>
+        </div>
+      </div>
+    </section>
+
     <section id="browser" hidden>
       <header class="browser-bar">
         <button id="back" class="icon-btn" aria-label="Back"><svg class="i"><use href="#i-left" /></svg></button>
@@ -281,6 +326,8 @@
   <script src="today.js"></script>
   <script src="review.js"></script>
   <script src="insights-view.js"></script>
+  <script src="cv.js"></script>
+  <script src="letter.js"></script>
   <script src="palette.js"></script>
 </body>
 </html>

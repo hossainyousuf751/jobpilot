@@ -1,0 +1,71 @@
+/* Document styles shared by the live preview and the PDF export (CV and cover letter).
+   Print units: pt for type, mm for page geometry. Design choices arrive as custom properties and classes on .doc. */
+.doc {
+  --accent: #2b59ff; --font: "Segoe UI", system-ui, sans-serif; --size: 10.5pt; --lh: 1.35; --margin: 16mm; --gap: 12pt;
+  --ink: #1d2128; --ink-2: #4a5160; --ink-3: #6b7280; --rule: #d9dde3;
+  box-sizing: border-box; width: 210mm; min-height: 297mm; padding: var(--margin); background: #fff; color: var(--ink);
+  font: var(--size)/var(--lh) var(--font); text-align: left; overflow-wrap: anywhere;
+}
+.doc *, .doc *::before, .doc *::after { box-sizing: border-box; }
+.doc p { margin: 0 0 4pt; }
+.doc ul { margin: 2pt 0 0; padding-left: 12pt; }
+.doc li { margin: 0 0 1.5pt; }
+
+/* Header */
+.doc-head { margin-bottom: calc(var(--gap) * 1.1); }
+.head-center .doc-head { text-align: center; }
+.doc-name { margin: 0; font-size: 2.15em; line-height: 1.1; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.doc-title { margin-top: 2pt; font-size: 1.15em; color: var(--accent); font-weight: 600; }
+.doc-contact { margin-top: 5pt; color: var(--ink-2); font-size: .92em; display: flex; flex-wrap: wrap; gap: 2pt 10pt; }
+.head-center .doc-contact { justify-content: center; }
+.doc-contact span + span::before { content: "·"; margin-right: 10pt; color: var(--rule); }
+
+/* Section headings: four styles */
+.doc-sec { margin-bottom: var(--gap); break-inside: auto; }
+.doc-h { margin: 0 0 5pt; font-size: 1.08em; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; break-after: avoid; }
+.hs-underline .doc-h { padding-bottom: 2pt; border-bottom: 1.2pt solid var(--accent); }
+.hs-box .doc-h { padding: 2pt 6pt; background: color-mix(in srgb, var(--accent) 12%, #fff); color: var(--ink); border-left: 3pt solid var(--accent); }
+.hs-bar .doc-h { display: flex; align-items: center; gap: 8pt; }
+.hs-bar .doc-h::after { content: ""; flex: 1; height: 1pt; background: var(--rule); }
+.hs-plain .doc-h { color: var(--ink); font-variant: small-caps; text-transform: none; letter-spacing: .04em; font-size: 1.2em; }
+
+/* Entries */
+.doc-entry { margin-bottom: calc(var(--gap) * .6); break-inside: avoid; }
+.doc-entry:last-child { margin-bottom: 0; }
+.doc-entry-top { display: flex; justify-content: space-between; gap: 10pt; align-items: baseline; }
+.doc-et { font-weight: 700; color: var(--ink); }
+.doc-es { color: var(--ink-2); }
+.doc-date { flex: none; color: var(--ink-3); font-size: .92em; white-space: nowrap; text-align: right; }
+.dp-below .doc-entry-top { display: block; }
+.dp-below .doc-date { text-align: left; margin-top: 1pt; }
+.doc-desc { margin-top: 2pt; color: var(--ink); }
+.doc-text { white-space: pre-wrap; }
+
+/* Tags (skills, languages) */
+.doc-tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4pt; }
+.doc-tags li { margin: 0; padding: 1pt 6pt; border: .8pt solid var(--rule); border-radius: 3pt; }
+.doc-level { margin-left: 4pt; color: var(--accent); letter-spacing: 1pt; font-size: .85em; }
+
+/* Two columns with a sidebar */
+.doc-cols { display: grid; gap: 0 14pt; }
+.layout-left .doc-cols { grid-template-columns: 31% 1fr; }
+.layout-right .doc-cols { grid-template-columns: 1fr 31%; }
+.layout-right .doc-side { order: 2; }
+.doc-side { padding-right: 10pt; border-right: .8pt solid var(--rule); }
+.layout-right .doc-side { padding: 0 0 0 10pt; border-right: 0; border-left: .8pt solid var(--rule); }
+.doc-side .doc-tags { flex-direction: column; gap: 3pt; }
+.doc-side .doc-tags li { border: 0; padding: 0; }
+.doc-side .doc-entry-top { display: block; }
+.doc-side .doc-date { text-align: left; }
+
+/* Cover letter */
+.letter .doc-head { padding-bottom: 8pt; border-bottom: 1.2pt solid var(--accent); }
+.letter-meta { display: flex; justify-content: space-between; gap: 16pt; margin: 14pt 0 16pt; color: var(--ink-2); }
+.letter-to { white-space: pre-wrap; }
+.letter-subject { font-weight: 700; margin-bottom: 10pt; color: var(--ink); }
+.letter-body p { margin: 0 0 9pt; text-align: justify; hyphens: auto; }
+.letter-sign { margin-top: 16pt; }
+.letter-sign .doc-name { font-size: 1.25em; margin-top: 14pt; }
+
+/* Print: page margins come from @page (set per export), so the page box itself has none. */
+@media print { body.print { margin: 0; } .print .doc { width: auto; min-height: 0; padding: 0; } }

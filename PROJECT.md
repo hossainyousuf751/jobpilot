@@ -20,6 +20,8 @@ main.js also owns: 30-min poller, notifications, secrets (safeStorage), webview 
 | `db.js` | Schema, migrations and queries | Contain business rules beyond constraints |
 | `insights.js` | Pure: Today briefing (`briefing`) and market insights (`insights`, `parseSalary`) from job lists | Touch I/O or the DB |
 | `recruiters.js` | Contact extraction; the hiring-team script for the viewed page | Navigate or crawl pages |
+| `cvdoc.js` | Pure: CV document model (`newCv`, section presets, design defaults) and the offline CV text importer (`parseCvText`) | Touch I/O or the DB |
+| `src/ui/cv.js`, `letter.js`, `doc.css` | CV builder and cover-letter studio; `doc.css` styles both the preview and the PDF | Rely on script in the PDF (the print window has JavaScript off) |
 | `main.js` | IPC, validation, orchestration, OS integration | Hold scoring or parsing logic |
 | `src/ui/*` | Rendering and user actions | Use `innerHTML` with data; call Node |
 
@@ -29,6 +31,10 @@ main.js also owns: 30-min poller, notifications, secrets (safeStorage), webview 
 - `id` is `<source>:<native id>`, which must be stable across runs because it drives deduplication and alerts.
 - `url` must be http(s); jobs without a title or a valid URL are dropped in `fetchAll`.
 - Optional fields: `applicants` (integer, Reed only; validated in `main.js`; drives the "Few applicants" / "N applicants already" notes), `job_type` (comma list of fulltime, parttime, contract, internship, temporary; normalised by `jobType()` in `fetchAll`, validated in `main.js`), `salary` (display string such as "BDT 25,000-40,000 / month", ≤ 60 chars), `emails` (addresses the site listed; turned into recruiters) and `company_url` (the employer's own website, never a job board page; validated in `main.js`, used for Hunter.io). Document any new ones here.
+
+**Document** (table `documents`: `id` matching `/^[a-z0-9]{6,40}$/`, `kind` cv|letter, `name`, `data` JSON ≤ 1 MB, `updated_at`; `saveDoc` upserts):
+- CV: `{ personal, sections[{ id, type, title, kind, hidden, side?, text, items }], design }` (defaults in `cvdoc.js` `DESIGN_DEFAULT`).
+- Letter: `{ cvId, jobId, company, role, recipient, address, date, tone, signoff, order[], blocks{}, variants{}, proof[] }`.
 
 **Profile** (stored as JSON in `profile`, defaults in `main.js` `DEFAULT_PROFILE`):
 - `skills[]`, `years`, `roles[]` (search queries, max 5, all searched in turn), `suggestedRoles[]` (inferred from the CV, shown as chips, never applied silently), `cvTerms{}` (term counts from the CV's experience/skills sections, used for TF-IDF similarity; the CV text itself is not stored), `locations[]` (on-site, "City, Country"; first one is searched), `education` (1-4, null = not set), `expectedSalary` ({amount, currency, period} or null), `calibration` (computed, not user-edited), `distanceKm`, `relocate[]` (countries, one searched per refresh), `remoteFrom[]` (regions), `needsSponsorship`, `minScore`, `adzunaCountry`, `cvFile`.

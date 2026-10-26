@@ -108,7 +108,7 @@ function show(tab) {
     const t = document.startViewTransition(swap);
     [t.ready, t.finished, t.updateCallbackDone].forEach((p) => p.catch(() => {}));
   } else swap();
-  ({ today: loadToday, review: loadReview, insights: loadInsights, feed: loadJobs, myjobs: loadMyJobs, alerts: loadAlerts,
+  ({ today: loadToday, review: loadReview, insights: loadInsights, cvbuilder: loadCvBuilder, letters: loadLetters, feed: loadJobs, myjobs: loadMyJobs, alerts: loadAlerts,
     recruiters: loadRecruiters, profile: loadProfile })[section]?.();
   // A hidden webview drops its src, so load the default portal on first show.
   if (tab === 'browser' && wv.getAttribute('src') === 'about:blank') wv.src = 'https://www.linkedin.com/jobs/';

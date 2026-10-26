@@ -95,6 +95,34 @@ The user asked for more metrics so that the score is accurate. More metrics alon
 - **Learning:** once there are at least 20 decisions with at least 5 of each kind, a logistic regression on the metric vector learns personal weights. These are blended with the priors in proportion to how much data exists (at most 70% learned).
 - **Accuracy:** the app reports agreement (AUC: how often a job you kept outranks one you dropped). It is measured on half the decisions held out from training, for both the prior weights and the learned weights, and shown in Insights.
 
+## Documents: CV builder and cover-letter studio (2026-10-26)
+Two new sections under "Documents". Everything stays local; PDFs are made by Electron's own `printToPDF`, with no new dependency.
+
+**CV builder (FlowCV-style):**
+- **Layout:** editor on the left, live A4 preview on the right; several CVs (create, duplicate, rename, delete); autosave.
+- **Content tab:**
+  - Personal details: name, job title, email, phone, location, links.
+  - Sections you can add, hide, rename, collapse and drag to reorder: profile (text); experience, education, projects, courses/certificates, publications, references, custom (entries); skills, languages (tags with optional level).
+  - Entries: title, subtitle, location, start/end or "present", and bullet description. Reorder by drag or ↑↓.
+- **Customize tab:**
+  - Templates (Classic, Modern, Executive, Compact) as presets of the controls below.
+  - Layout: one column, or two columns with a sidebar left or right.
+  - Header alignment; heading style (underline, box, accent bar, plain); accent colour; font family; font size, line height, margins, section spacing; date position.
+- **Import from my CV:** parses a PDF, DOCX or TXT into sections and entries (heuristic; you edit the result).
+- **Download PDF:** A4, via a hidden, script-disabled window and `printToPDF`.
+
+**Cover-letter studio (creative brief):**
+- **Job-aware:** pick a job from your feed. The letterhead, company, role and the job's skills fill in automatically.
+- **Structure:** draft from blocks (Hook, Why this company, Why me, Proof, Close). Choose a tone (Formal, Confident, Warm) and regenerate any block; edit freely.
+- **Evidence picker:** your CV's experience bullets, one click to cite as proof.
+- **Coach panel:**
+  - keyword coverage (which of the job's skills the letter mentions; click a missing one to add it);
+  - length target (250-400 words);
+  - "you vs I" balance (letters that talk about the employer read better);
+  - average sentence length.
+- **Matching set:** the letter uses the chosen CV's design and personal details.
+- **Download PDF.**
+
 ## Layout
 - `src/main.js` window, IPC, poller, notifications · `src/db.js` SQLite · `src/sources.js` job APIs
 - `src/match.js` CV parsing → profile, job scoring · `src/recruiters.js` contact extraction

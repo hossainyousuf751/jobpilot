@@ -5,6 +5,8 @@ const { open } = require('./db');
 const { fetchAll, hunterContacts, fetchRates, parseRates } = require('./sources');
 const { buildProfile, buildCorpus, scoreJob, calibrate, PRIOR_WEIGHTS } = require('./match');
 const { briefing, insights } = require('./insights');
+const { newCv, parseCvText, uid } = require('./cvdoc');
+const { pathToFileURL } = require('node:url');
 const { contactsFromText, peopleSearchUrl, HIRING_TEAM_SCRIPT } = require('./recruiters');
 
 const POLL_MS = 30 * 60 * 1000;
@@ -99,18 +101,44 @@ function rescoreAll() {
   for (const j of all) db.rescore(j.id, scoreJob(p, j, corpus));
 }
 
+// Ask for a CV file and return its text (PDF, DOCX, TXT/MD).
+async function pickCvText() {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, { filters: [{ name: 'CV', extensions: ['pdf', 'docx', 'txt', 'md'] }], properties: ['openFile'] });
+  if (canceled) return null;
+  const f = filePaths[0], ext = path.extname(f).toLowerCase(), buf = fs.readFileSync(f);
+  // pdf.js rejects with plain objects; turn them into a readable message.
+  const text = ext === '.pdf' ? (await require('pdf-parse/lib/pdf-parse.js')(buf).catch((e) => { throw new Error(`Could not read that PDF (${e?.message || e}). Try a DOCX or TXT export.`); })).text
+    : ext === '.docx' ? (await require('mammoth').extractRawText({ buffer: buf })).value
+    : buf.toString('utf8');
+  if (text.trim().length < 50) throw new Error('Could not read text from that file (scanned PDF?). Try a DOCX or TXT export.');
+  return { f, text };
+}
+
+// Render document HTML (built by the renderer, text already escaped by the DOM) to an A4 PDF in a hidden window
+// with JavaScript off and a CSP that only allows the app's document stylesheet.
+let printWin = null;
+async function htmlToPdf(bodyHtml) {
+  const css = pathToFileURL(path.join(__dirname, 'ui', 'doc.css')).href;
+  const page = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src file: 'unsafe-inline'; font-src file:; img-src data:">
+<link rel="stylesheet" href="${css}"></head><body class="print">${bodyHtml}</body></html>`;
+  const tmp = file('print.html');
+  fs.writeFileSync(tmp, page);
+  // One hidden window, reused: destroying it and creating a new one right away made the next export fail (ERR_FAILED).
+  if (!printWin || printWin.isDestroyed()) printWin = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true, contextIsolation: true } });
+  try {
+    await printWin.loadFile(tmp);
+    return await printWin.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'none' } });
+  } finally { fs.rm(tmp, () => {}); }
+}
+
 const handlers = {
   getProfile: () => ({ profile: profile(), keys: Object.fromEntries(Object.entries(loadSecrets()).map(([k, v]) => [k, !!v])) }),
 
   async uploadCv() {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, { filters: [{ name: 'CV', extensions: ['pdf', 'docx', 'txt', 'md'] }], properties: ['openFile'] });
-    if (canceled) return null;
-    const f = filePaths[0], ext = path.extname(f).toLowerCase(), buf = fs.readFileSync(f);
-    // pdf.js rejects with plain objects; turn them into a readable message.
-    const text = ext === '.pdf' ? (await require('pdf-parse/lib/pdf-parse.js')(buf).catch((e) => { throw new Error(`Could not read that PDF (${e?.message || e}). Try a DOCX or TXT export.`); })).text
-      : ext === '.docx' ? (await require('mammoth').extractRawText({ buffer: buf })).value
-      : buf.toString('utf8');
-    if (text.trim().length < 50) throw new Error('Could not read text from that file (scanned PDF?). Try a DOCX or TXT export.');
+    const picked = await pickCvText();
+    if (!picked) return null;
+    const { f, text } = picked;
     const p = { ...profile(), ...buildProfile(text), cvFile: path.basename(f) };
     db.saveProfile(p);
     rescoreAll();
@@ -207,6 +235,34 @@ const handlers = {
     log('info', 'hunter search', { added });
     return added;
   },
+  // ---- Documents: CV builder and cover letters
+  listDocs: (_, kind) => db.listDocs(kind === 'letter' ? 'letter' : 'cv'),
+  getDoc: (_, id) => db.getDoc(str(id, 40)),
+  saveDoc(_, doc = {}) {
+    const json = JSON.stringify(doc.data ?? null);
+    if (!doc.data || typeof doc.data !== 'object' || json.length > 1e6) throw new Error('Document is empty or too large.');
+    const id = /^[a-z0-9]{6,40}$/.test(doc.id || '') ? doc.id : uid();
+    db.saveDoc({ id, kind: doc.kind === 'letter' ? 'letter' : 'cv', name: str(doc.name, 80) || 'Untitled', data: doc.data });
+    return id;
+  },
+  deleteDoc: (_, id) => db.deleteDoc(str(id, 40)),
+  newCv: () => newCv(profile()),
+  async importCv() {
+    const picked = await pickCvText();
+    if (!picked) return null;
+    const data = parseCvText(picked.text);
+    // Many CV designs show skills as graphics, so the text has no Skills heading: fall back to the profile's skills.
+    if (!data.sections.some((s) => s.type === 'skills') && profile().skills.length) data.sections.push({ ...newCv(profile()).sections.find((s) => s.type === 'skills') });
+    return { name: path.parse(picked.f).name, data };
+  },
+  async exportPdf(_, { html, name } = {}) {
+    if (typeof html !== 'string' || !html || html.length > 3e6) throw new Error('Nothing to export.');
+    const safe = (str(name, 80) || 'Document').replace(/[<>:"/\\|?*]+/g, ' ').trim();
+    const { canceled, filePath } = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), `${safe}.pdf`), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (canceled || !filePath) return null;
+    fs.writeFileSync(filePath, await htmlToPdf(html));
+    return filePath;
+  },
   openExternal: (_, url) => (isHttp(url) || /^mailto:[^\s/]+@[^\s/]+$/i.test(url)) && shell.openExternal(url),
 };
 
@@ -226,6 +282,8 @@ app.whenReady().then(() => {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, webviewTag: true },
   });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
+  // The hidden print window would otherwise keep the app alive after the main window closes.
+  win.on('closed', () => { if (printWin && !printWin.isDestroyed()) printWin.destroy(); });
 
   setTimeout(refresh, 3000);
   setInterval(refresh, POLL_MS);

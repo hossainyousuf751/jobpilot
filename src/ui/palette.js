@@ -1,7 +1,7 @@
 // Command palette (Ctrl+K): jump to any page, run any action, open any job.
 const PAGES = [['today', 'Today', 'sun'], ['review', 'Review matches', 'layers'], ['feed', 'Matches', 'target'], ['all', 'All jobs', 'list'],
   ['myjobs', 'My jobs', 'briefcase'], ['alerts', 'Alerts', 'bell'], ['recruiters', 'Recruiters', 'users'], ['insights', 'Insights', 'chart'],
-  ['browser', 'Portals', 'globe'], ['profile', 'Profile & CV', 'user']];
+  ['cvbuilder', 'CV builder', 'file'], ['letters', 'Cover letters', 'mail'], ['browser', 'Portals', 'globe'], ['profile', 'Profile & CV', 'user']];
 const ACTIONS = [
   ['Refresh jobs now', 'refresh', () => guard(async () => { const r = await api.refresh(); if (r?.error) toast(r.error, 'error'); })()],
   ['Upload a new CV', 'upload', () => { show('profile'); $('#upload').click(); }],

@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const calls = ['getProfile', 'uploadCv', 'saveProfile', 'saveKeys', 'refresh', 'listJobs', 'getJob', 'myJobs', 'stats', 'reviewQueue', 'markReviewed', 'undoReview', 'briefing', 'insights', 'setJobStage', 'setJobStatus', 'listAlerts', 'unreadAlerts',
-  'readAlerts', 'listRecruiters', 'setRecruiterStatus', 'hiringTeamScript', 'addRecruiters', 'findCompanyContacts', 'openExternal'];
+  'readAlerts', 'listRecruiters', 'setRecruiterStatus', 'hiringTeamScript', 'addRecruiters', 'findCompanyContacts', 'listDocs', 'getDoc', 'saveDoc', 'deleteDoc', 'newCv', 'importCv', 'exportPdf', 'openExternal'];
 
 contextBridge.exposeInMainWorld('api', {
   ...Object.fromEntries(calls.map((c) => [c, (...a) => ipcRenderer.invoke(c, ...a)])),

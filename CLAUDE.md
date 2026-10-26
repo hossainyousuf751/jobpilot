@@ -119,6 +119,10 @@ There is a knowledge graph of the code and docs in `graphify-out/`: 258 nodes, 1
   - Reed details: UK-only, gated on the UK being in locations/relocate, every 2 h offset from JSearch, one search plus details for the top 10, location suffixed ", United Kingdom" (it is often a postcode), salary period from `salaryType`, HTML-decoded titles.
   - Applicant counts come from search `applications`: the details endpoint's `applicationCount` is always 0.
 - **Control-character guard:** a test fails if any `src` file contains control characters. Generated edits had turned regex `` into backspace (broke the "temp" job type).
+- **Documents (2026-10-26):** a CV builder (FlowCV-style) and a cover-letter studio, under Documents in the sidebar.
+  - CVs and letters are JSON in the `documents` table. `cvdoc.js` holds the CV model and the offline importer (`parseCvText`, role-first entries); `src/ui/cv.js` the builder (4 templates, design panel, drag-to-reorder sections, sidebar column); `src/ui/letter.js` the studio (5 blocks × 3 tones drafted from the CV and the chosen job, a coach for length, You/I balance and keywords).
+  - `doc.css` is shared by preview and PDF. `exportPdf` prints in one reused hidden window (JavaScript off, strict CSP): a new window per export made the second export fail with ERR_FAILED.
+  - The user's CV was imported as a document (Classic; skills added from the profile). A sample letter exists for Aftab Bahumukhi Farms.
 - **Next:** the user tests Hunter with a real key. Slice 6 (employer ATS boards) only if the user asks.
 - **Not yet confirmed by a human:**
   - LinkedIn login persisting across restarts;
