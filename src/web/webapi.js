@@ -327,6 +327,8 @@
           location.reload();
         }, 'btn btn-danger'));
       document.querySelector('#profile .settings')?.prepend(card);
+      const note = document.querySelector('.private');
+      if (note) note.lastChild.textContent = 'Private · only you see your data';
     };
     document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', add) : add();
     refresh();
